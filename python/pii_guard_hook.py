@@ -69,6 +69,8 @@ def _wrap_urlopen(connectionpool_module):
                         _block_semantic(method, url, semantic)
                     elif semantic.category == "jailbreak":
                         _warn_semantic(method, url, semantic)
+            except (PiiBlockedError, InjectionBlockedError):
+                raise
             except Exception as e:
                 print(f"[PII_GUARD] Layer 2 분석 오류: {e}", file=sys.stderr)
 
