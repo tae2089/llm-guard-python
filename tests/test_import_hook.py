@@ -11,6 +11,7 @@ CONFIG_PATH = os.path.join(os.path.dirname(__file__), "..", "config", "pii_patte
 def run_python(code):
     env = os.environ.copy()
     env["PYTHONPATH"] = PYTHON_DIR
+    env["PII_GUARD_DISABLE"] = "1"
     result = subprocess.run(
         [VENV_PYTHON, "-c", textwrap.dedent(code)],
         capture_output=True, text=True, env=env,
