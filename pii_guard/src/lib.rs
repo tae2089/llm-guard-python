@@ -5,6 +5,8 @@ use std::sync::OnceLock;
 mod config;
 mod detector;
 mod logger;
+mod vectordb;
+mod semantic;
 
 use detector::PiiDetector;
 use logger::Logger;
