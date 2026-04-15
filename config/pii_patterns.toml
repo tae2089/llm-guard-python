@@ -1,0 +1,25 @@
+[patterns]
+
+[patterns.resident_id]
+name = "주민등록번호"
+regex = '\d{6}-[1-4]\d{6}'
+
+[patterns.phone]
+name = "전화번호"
+regex = '(01[016789]-?\d{3,4}-?\d{4})'
+
+[patterns.email]
+name = "이메일"
+regex = '[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'
+
+[patterns.credit_card]
+name = "신용카드번호"
+regex = '\d{4}-?\d{4}-?\d{4}-?\d{4}'
+
+[patterns.bank_account]
+name = "계좌번호"
+regex = '\d{3}-?\d{2,6}-?\d{2,6}-?\d{1,3}'
+
+[patterns.passport]
+name = "여권번호"
+regex = '[A-Z]{1}[0-9]{8}'

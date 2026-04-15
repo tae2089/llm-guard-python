@@ -1,0 +1,13 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+
+# Rust
+pii_guard/target/
+
+# IDE
+.omc/
+.idea/
+.vscode/
