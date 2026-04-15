@@ -1,1 +1,72 @@
-# PII Guard import hook - will be implemented in Task 6
+import sys
+import importlib
+
+
+class PiiBlockedError(Exception):
+    """PII가 탐지되어 요청이 차단되었을 때 발생하는 예외"""
+    pass
+
+
+class PiiGuardFinder:
+    """urllib3.connectionpool 임포트를 가로채서 urlopen을 래핑하는 커스텀 Finder"""
+
+    _hooked = False
+
+    def find_module(self, fullname, path=None):
+        if fullname == "urllib3.connectionpool" and not PiiGuardFinder._hooked:
+            return self
+        return None
+
+    def load_module(self, fullname):
+        # 무한 재귀 방지: 자신을 임시 제거
+        sys.meta_path.remove(self)
+        try:
+            module = importlib.import_module(fullname)
+            sys.modules[fullname] = module
+            _wrap_urlopen(module)
+            PiiGuardFinder._hooked = True
+        finally:
+            sys.meta_path.insert(0, self)
+        return module
+
+
+def _wrap_urlopen(connectionpool_module):
+    """HTTPConnectionPool.urlopen을 래핑"""
+    original = connectionpool_module.HTTPConnectionPool.urlopen
+
+    def wrapped_urlopen(self, method, url, body=None, headers=None, **kwargs):
+        import pii_guard
+
+        # header 검사
+        if headers:
+            items = headers.items() if hasattr(headers, "items") else []
+            for key, value in items:
+                result = pii_guard.scan(f"{key}: {value}")
+                if result:
+                    _block(method, url, result)
+
+        # body 검사
+        if body:
+            if isinstance(body, bytes):
+                text = body.decode("utf-8", errors="ignore")
+            elif isinstance(body, str):
+                text = body
+            else:
+                text = str(body)
+            result = pii_guard.scan(text)
+            if result:
+                _block(method, url, result)
+
+        return original(self, method, url, body=body, headers=headers, **kwargs)
+
+    wrapped_urlopen.__pii_guard_wrapped__ = True
+    connectionpool_module.HTTPConnectionPool.urlopen = wrapped_urlopen
+
+
+def _block(method, url, scan_result):
+    """요청 차단: 로그 + stderr + 예외"""
+    import pii_guard
+    pii_guard.log_block(method, str(url), scan_result.pattern_name, scan_result.matched_value)
+    raise PiiBlockedError(
+        f"[PII_GUARD] 차단: {method} {url} - {scan_result.pattern_name} 발견"
+    )
