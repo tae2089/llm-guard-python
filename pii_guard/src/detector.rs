@@ -1,13 +1,16 @@
+#[derive(Debug)]
 pub struct PiiPattern {
     pub name: String,
     pub compiled: regex::Regex,
 }
 
+#[derive(Debug)]
 pub struct ScanMatch {
     pub pattern_name: String,
     pub matched_value: String,
 }
 
+#[derive(Debug)]
 pub struct PiiDetector {
     patterns: Vec<PiiPattern>,
 }
