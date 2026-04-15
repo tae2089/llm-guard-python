@@ -6,6 +6,10 @@ __pycache__/
 
 # Rust
 pii_guard/target/
+pii_guard/.fastembed_cache/
+
+# Logs
+pii_guard.log
 
 # IDE
 .omc/
