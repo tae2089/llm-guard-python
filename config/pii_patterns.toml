@@ -23,3 +23,10 @@ regex = '\d{3}-?\d{2,6}-?\d{2,6}-?\d{1,3}'
 [patterns.passport]
 name = "여권번호"
 regex = '[A-Z]{1}[0-9]{8}'
+
+[semantic]
+enabled = true
+db_path = "attack_vectors.duckdb"
+seed_path = "attack_vectors.toml"
+injection_threshold = 0.85
+jailbreak_threshold = 0.80
