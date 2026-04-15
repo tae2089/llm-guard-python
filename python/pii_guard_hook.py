@@ -7,6 +7,11 @@ class PiiBlockedError(Exception):
     pass
 
 
+class InjectionBlockedError(Exception):
+    """프롬프트 인젝션이 탐지되어 요청이 차단되었을 때 발생하는 예외"""
+    pass
+
+
 class PiiGuardFinder:
     """urllib3.connectionpool 임포트를 가로채서 urlopen을 래핑하는 커스텀 Finder"""
 
@@ -18,7 +23,6 @@ class PiiGuardFinder:
         return None
 
     def load_module(self, fullname):
-        # 무한 재귀 방지: 자신을 임시 제거
         sys.meta_path.remove(self)
         try:
             module = importlib.import_module(fullname)
@@ -37,15 +41,14 @@ def _wrap_urlopen(connectionpool_module):
     def wrapped_urlopen(self, method, url, body=None, headers=None, **kwargs):
         import pii_guard
 
-        # header 검사
+        # --- Layer 1: PII 정규식 ---
         if headers:
             items = headers.items() if hasattr(headers, "items") else []
             for key, value in items:
                 result = pii_guard.scan(f"{key}: {value}")
                 if result:
-                    _block(method, url, result)
+                    _block_pii(method, url, result)
 
-        # body 검사
         if body:
             if isinstance(body, bytes):
                 text = body.decode("utf-8", errors="ignore")
@@ -53,9 +56,21 @@ def _wrap_urlopen(connectionpool_module):
                 text = body
             else:
                 text = str(body)
+
             result = pii_guard.scan(text)
             if result:
-                _block(method, url, result)
+                _block_pii(method, url, result)
+
+            # --- Layer 2: 의미론적 분석 ---
+            try:
+                semantic = pii_guard.analyze(text)
+                if semantic:
+                    if semantic.category == "injection":
+                        _block_semantic(method, url, semantic)
+                    elif semantic.category == "jailbreak":
+                        _warn_semantic(method, url, semantic)
+            except Exception as e:
+                print(f"[PII_GUARD] Layer 2 분석 오류: {e}", file=sys.stderr)
 
         return original(self, method, url, body=body, headers=headers, **kwargs)
 
@@ -63,10 +78,27 @@ def _wrap_urlopen(connectionpool_module):
     connectionpool_module.HTTPConnectionPool.urlopen = wrapped_urlopen
 
 
-def _block(method, url, scan_result):
-    """요청 차단: 로그 + stderr + 예외"""
+def _block_pii(method, url, scan_result):
+    """PII 차단: 로그 + stderr + 예외"""
     import pii_guard
     pii_guard.log_block(method, str(url), scan_result.pattern_name, scan_result.matched_value)
     raise PiiBlockedError(
         f"[PII_GUARD] 차단: {method} {url} - {scan_result.pattern_name} 발견"
     )
+
+
+def _block_semantic(method, url, result):
+    """인젝션 차단: 로그 + stderr + 예외"""
+    import pii_guard
+    pii_guard.log_block(method, str(url), result.category, result.matched_text)
+    raise InjectionBlockedError(
+        f"[PII_GUARD] 차단: {method} {url} - {result.category} 감지 (score={result.score:.2f})"
+    )
+
+
+def _warn_semantic(method, url, result):
+    """탈옥 경고: 로그 + stderr, 요청은 통과"""
+    import pii_guard
+    msg = f"[PII_GUARD] 경고: {method} {url} - {result.category} 감지 (score={result.score:.2f})"
+    pii_guard.log_block(method, str(url), result.category, result.matched_text)
+    print(msg, file=sys.stderr)
