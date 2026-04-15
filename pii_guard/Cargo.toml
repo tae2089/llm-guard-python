@@ -1,0 +1,15 @@
+[package]
+name = "pii_guard"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "pii_guard"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.22", features = ["extension-module"] }
+regex = "1"
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"
+chrono = "0.4"
