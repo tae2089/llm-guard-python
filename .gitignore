@@ -2,16 +2,33 @@
 .venv/
 __pycache__/
 *.pyc
+*.pyo
 *.egg-info/
+dist/
+build/
+*.whl
 
 # Rust
 pii_guard/target/
+
+# FastEmbed 모델 캐시
+.fastembed_cache/
 pii_guard/.fastembed_cache/
 
+# DuckDB
+*.duckdb
+*.duckdb.wal
+
 # Logs
-pii_guard.log
+*.log
 
 # IDE
 .omc/
 .idea/
 .vscode/
+*.swp
+*.swo
+.DS_Store
+
+# pytest
+.pytest_cache/
