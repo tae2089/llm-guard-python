@@ -29,7 +29,9 @@ jobs:
           target: ${{ matrix.target }}
           args: --release --out dist --find-interpreter
           sccache: "true"
-          manylinux: auto
+          manylinux: "2_28"
+          before-script-linux: |
+            dnf install -y cmake gcc-c++ || yum install -y cmake3 gcc-c++
           working-directory: pii_guard
 
       - name: Upload wheels
@@ -50,6 +52,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+
+      - name: Install cmake
+        run: brew install cmake
 
       - name: Build wheels
         uses: PyO3/maturin-action@v1
@@ -74,6 +79,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+
+      - name: Install cmake
+        run: choco install cmake --installargs 'ADD_CMAKE_TO_PATH=System' -y
 
       - name: Build wheels
         uses: PyO3/maturin-action@v1
