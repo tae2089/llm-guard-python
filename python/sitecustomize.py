@@ -22,14 +22,14 @@ def _chain_load_sitecustomize():
             other_dir = os.path.abspath(os.path.dirname(spec.origin))
             if other_dir != our_dir:
                 print(
-                    f"[PII_GUARD] 체이닝: {spec.origin} 로드",
+                    f"[LLM_GUARD] 체이닝: {spec.origin} 로드",
                     file=sys.stderr,
                 )
                 module = importlib.util.module_from_spec(spec)
                 spec.loader.exec_module(module)
     except Exception as e:
         print(
-            f"[PII_GUARD] sitecustomize 체이닝 실패 (무시): {e}",
+            f"[LLM_GUARD] sitecustomize 체이닝 실패 (무시): {e}",
             file=sys.stderr,
         )
     finally:
@@ -39,48 +39,48 @@ def _chain_load_sitecustomize():
             sys.modules["sitecustomize"] = saved
 
 
-# --- PII Guard 부트스트랩 ---
-def _bootstrap_pii_guard():
-    if os.environ.get("PII_GUARD_DISABLE", "").lower() in ("1", "true"):
+# --- LLM Guard 부트스트랩 ---
+def _bootstrap_llm_guard():
+    if os.environ.get("LLM_GUARD_DISABLE", "").lower() in ("1", "true"):
         return
 
-    import pii_guard
+    import llm_guard
 
     config_path = os.environ.get(
-        "PII_GUARD_CONFIG",
+        "LLM_GUARD_CONFIG",
         os.path.join(os.path.dirname(__file__), "..", "config", "pii_patterns.toml"),
     )
-    pii_guard.load_config(config_path)
+    llm_guard.load_config(config_path)
 
-    from pii_guard_hook import PiiGuardFinder
+    from llm_guard_hook import LlmGuardFinder
 
-    sys.meta_path.insert(0, PiiGuardFinder())
+    sys.meta_path.insert(0, LlmGuardFinder())
 
-    print("[PII_GUARD] 활성화됨", file=sys.stderr)
+    print("[LLM_GUARD] 활성화됨", file=sys.stderr)
 
     # --- Layer 2: 의미론적 분석 초기화 ---
     try:
-        semantic_config = pii_guard.get_semantic_config()
+        semantic_config = llm_guard.get_semantic_config()
         if semantic_config:
             config_dir = os.path.dirname(config_path)
             db_path = os.path.join(config_dir, semantic_config["db_path"])
             seed_path = os.path.join(config_dir, semantic_config["seed_path"])
-            pii_guard.init_semantic(
+            llm_guard.init_semantic(
                 db_path,
                 seed_path,
                 semantic_config["injection_threshold"],
                 semantic_config["jailbreak_threshold"],
             )
-            print("[PII_GUARD] 의미론적 분석 활성화됨", file=sys.stderr)
+            print("[LLM_GUARD] 의미론적 분석 활성화됨", file=sys.stderr)
     except Exception as e:
-        print(f"[PII_GUARD] 의미론적 분석 초기화 실패 (Layer 1은 정상): {e}", file=sys.stderr)
+        print(f"[LLM_GUARD] 의미론적 분석 초기화 실패 (Layer 1은 정상): {e}", file=sys.stderr)
 
 
 # --- 실행 ---
 try:
-    _bootstrap_pii_guard()
+    _bootstrap_llm_guard()
 except Exception as e:
-    print(f"[PII_GUARD] 초기화 실패: {e}", file=sys.stderr)
+    print(f"[LLM_GUARD] 초기화 실패: {e}", file=sys.stderr)
 
-# 항상 체이닝 시도 (PII Guard 실패해도 다른 도구는 실행)
+# 항상 체이닝 시도 (LLM Guard 실패해도 다른 도구는 실행)
 _chain_load_sitecustomize()

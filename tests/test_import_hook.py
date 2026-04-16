@@ -11,7 +11,7 @@ CONFIG_PATH = os.path.join(os.path.dirname(__file__), "..", "config", "pii_patte
 def run_python(code):
     env = os.environ.copy()
     env["PYTHONPATH"] = PYTHON_DIR
-    env["PII_GUARD_DISABLE"] = "1"
+    env["LLM_GUARD_DISABLE"] = "1"
     result = subprocess.run(
         [VENV_PYTHON, "-c", textwrap.dedent(code)],
         capture_output=True, text=True, env=env,
@@ -21,41 +21,41 @@ def run_python(code):
 
 def test_finder_registers_on_meta_path():
     r = run_python(f"""
-        import pii_guard
-        pii_guard.load_config("{CONFIG_PATH}")
+        import llm_guard
+        llm_guard.load_config("{CONFIG_PATH}")
 
-        from pii_guard_hook import PiiGuardFinder
+        from llm_guard_hook import LlmGuardFinder
         import sys
-        finder = PiiGuardFinder()
+        finder = LlmGuardFinder()
         sys.meta_path.insert(0, finder)
-        assert any(isinstance(f, PiiGuardFinder) for f in sys.meta_path)
+        assert any(isinstance(f, LlmGuardFinder) for f in sys.meta_path)
     """)
     assert r.returncode == 0, r.stderr
 
 
 def test_urlopen_is_wrapped_after_urllib3_import():
     r = run_python(f"""
-        import pii_guard
-        pii_guard.load_config("{CONFIG_PATH}")
+        import llm_guard
+        llm_guard.load_config("{CONFIG_PATH}")
 
-        from pii_guard_hook import PiiGuardFinder
+        from llm_guard_hook import LlmGuardFinder
         import sys
-        sys.meta_path.insert(0, PiiGuardFinder())
+        sys.meta_path.insert(0, LlmGuardFinder())
 
         import urllib3.connectionpool
-        assert hasattr(urllib3.connectionpool.HTTPConnectionPool.urlopen, '__pii_guard_wrapped__')
+        assert hasattr(urllib3.connectionpool.HTTPConnectionPool.urlopen, '__llm_guard_wrapped__')
     """)
     assert r.returncode == 0, r.stderr
 
 
 def test_pii_in_body_raises_error():
     r = run_python(f"""
-        import pii_guard
-        pii_guard.load_config("{CONFIG_PATH}")
+        import llm_guard
+        llm_guard.load_config("{CONFIG_PATH}")
 
-        from pii_guard_hook import PiiGuardFinder, PiiBlockedError
+        from llm_guard_hook import LlmGuardFinder, PiiBlockedError
         import sys
-        sys.meta_path.insert(0, PiiGuardFinder())
+        sys.meta_path.insert(0, LlmGuardFinder())
 
         import urllib3
         http = urllib3.PoolManager()
@@ -73,12 +73,12 @@ def test_pii_in_body_raises_error():
 
 def test_pii_in_header_raises_error():
     r = run_python(f"""
-        import pii_guard
-        pii_guard.load_config("{CONFIG_PATH}")
+        import llm_guard
+        llm_guard.load_config("{CONFIG_PATH}")
 
-        from pii_guard_hook import PiiGuardFinder, PiiBlockedError
+        from llm_guard_hook import LlmGuardFinder, PiiBlockedError
         import sys
-        sys.meta_path.insert(0, PiiGuardFinder())
+        sys.meta_path.insert(0, LlmGuardFinder())
 
         import urllib3
         http = urllib3.PoolManager()
@@ -95,15 +95,15 @@ def test_pii_in_header_raises_error():
 
 def test_clean_request_wrapping_applied():
     r = run_python(f"""
-        import pii_guard
-        pii_guard.load_config("{CONFIG_PATH}")
+        import llm_guard
+        llm_guard.load_config("{CONFIG_PATH}")
 
-        from pii_guard_hook import PiiGuardFinder
+        from llm_guard_hook import LlmGuardFinder
         import sys
-        sys.meta_path.insert(0, PiiGuardFinder())
+        sys.meta_path.insert(0, LlmGuardFinder())
 
         import urllib3.connectionpool
-        assert hasattr(urllib3.connectionpool.HTTPConnectionPool.urlopen, '__pii_guard_wrapped__')
+        assert hasattr(urllib3.connectionpool.HTTPConnectionPool.urlopen, '__llm_guard_wrapped__')
         print("WRAPPED_OK")
     """)
     assert r.returncode == 0, r.stderr
