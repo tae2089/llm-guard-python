@@ -29,7 +29,6 @@ jobs:
         with:
           target: ${{ matrix.target }}
           args: --release --out dist -i 3.13
-          sccache: "true"
           manylinux: "2_28"
           before-script-linux: "dnf install -y perl-core 2>/dev/null || apt-get install -y perl 2>/dev/null || true"
           working-directory: pii_guard
@@ -55,7 +54,6 @@ jobs:
         with:
           target: aarch64
           args: --release --out dist -i 3.13
-          sccache: "true"
           working-directory: pii_guard
 
       - name: Upload wheels
@@ -79,7 +77,6 @@ jobs:
         with:
           target: x86_64
           args: --release --out dist -i 3.13
-          sccache: "true"
           working-directory: pii_guard
 
       - name: Upload wheels
