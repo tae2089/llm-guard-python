@@ -13,3 +13,20 @@ services:
       - bash
       - -c
       - pip install llm-guard-python && python smoke_test.py
+
+  demo:
+    image: python:3.13-slim
+    volumes:
+      - ./config:/app/config:ro
+      - ./pii_guard:/app/pii_guard:ro
+      - ./tests/hook_demo.py:/app/hook_demo.py:ro
+    working_dir: /app
+    environment:
+      LLM_GUARD_SEMANTIC: "0"
+    command:
+      - bash
+      - -c
+      - |
+        pip install maturin requests --quiet &&
+        cd pii_guard && maturin develop --release --skip-auditwheel 2>&1 | tail -3 &&
+        cd /app && python hook_demo.py

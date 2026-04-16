@@ -1,0 +1,17 @@
+FROM python:3.13-slim AS builder
+RUN apt-get update && apt-get install -y curl build-essential pkg-config perl && rm -rf /var/lib/apt/lists/*
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+ENV PATH="/root/.cargo/bin:$PATH"
+RUN pip install maturin
+WORKDIR /build
+COPY pii_guard/ ./pii_guard/
+RUN cd pii_guard && maturin build --release --out /build/dist
+
+FROM python:3.13-slim
+COPY --from=builder /build/dist/*.whl /tmp/
+RUN pip install /tmp/*.whl requests
+COPY config/ /app/config/
+COPY tests/hook_demo.py /app/
+WORKDIR /app
+ENV LLM_GUARD_SEMANTIC=0
+CMD ["python", "hook_demo.py"]

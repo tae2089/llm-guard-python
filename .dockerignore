@@ -1,0 +1,8 @@
+.venv
+.git
+pii_guard/target
+**/__pycache__
+*.pyc
+*.duckdb
+*.log
+model_cache

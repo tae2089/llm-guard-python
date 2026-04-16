@@ -29,4 +29,8 @@ Issues = "https://github.com/tae2089/llm-guard-python/issues"
 
 [tool.maturin]
 features = ["pyo3/extension-module"]
-module-name = "llm_guard"
+module-name = "llm_guard._guard"
+python-source = "python"
+
+[project.scripts]
+llm-guard-run = "llm_guard._cli:main"

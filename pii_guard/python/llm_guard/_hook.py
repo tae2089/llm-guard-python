@@ -87,13 +87,13 @@ def _wrap_urlopen(connectionpool_module):
     original = connectionpool_module.HTTPConnectionPool.urlopen
 
     def wrapped_urlopen(self, method, url, body=None, headers=None, **kwargs):
-        import llm_guard
+        from llm_guard._guard import scan, log_block, analyze
 
         # --- Layer 1: PII 정규식 ---
         if headers:
             items = headers.items() if hasattr(headers, "items") else []
             for key, value in items:
-                result = llm_guard.scan(f"{key}: {value}")
+                result = scan(f"{key}: {value}")
                 if result:
                     _block_pii(method, url, result)
 
@@ -105,13 +105,13 @@ def _wrap_urlopen(connectionpool_module):
             else:
                 text = str(body)
 
-            result = llm_guard.scan(text)
+            result = scan(text)
             if result:
                 _block_pii(method, url, result)
 
             # --- Layer 2: 의미론적 분석 ---
             try:
-                semantic = llm_guard.analyze(text)
+                semantic = analyze(text)
                 if semantic:
                     if semantic.category == "injection":
                         _block_semantic(method, url, semantic)
@@ -130,8 +130,8 @@ def _wrap_urlopen(connectionpool_module):
 
 def _block_pii(method, url, scan_result):
     """PII 차단: 로그 + stderr + 예외"""
-    import llm_guard
-    llm_guard.log_block(method, str(url), scan_result.pattern_name, scan_result.matched_value)
+    from llm_guard._guard import log_block
+    log_block(method, str(url), scan_result.pattern_name, scan_result.matched_value)
     raise PiiBlockedError(
         f"[LLM_GUARD] 차단: {method} {url} - {scan_result.pattern_name} 발견"
     )
@@ -139,8 +139,8 @@ def _block_pii(method, url, scan_result):
 
 def _block_semantic(method, url, result):
     """인젝션 차단: 로그 + stderr + 예외"""
-    import llm_guard
-    llm_guard.log_block(method, str(url), result.category, result.matched_text)
+    from llm_guard._guard import log_block
+    log_block(method, str(url), result.category, result.matched_text)
     raise InjectionBlockedError(
         f"[LLM_GUARD] 차단: {method} {url} - {result.category} 감지 (score={result.score:.2f})"
     )
@@ -148,7 +148,7 @@ def _block_semantic(method, url, result):
 
 def _warn_semantic(method, url, result):
     """탈옥 경고: 로그 + stderr, 요청은 통과"""
-    import llm_guard
+    from llm_guard._guard import log_block
     msg = f"[LLM_GUARD] 경고: {method} {url} - {result.category} 감지 (score={result.score:.2f})"
-    llm_guard.log_block(method, str(url), result.category, result.matched_text)
+    log_block(method, str(url), result.category, result.matched_text)
     print(msg, file=sys.stderr)

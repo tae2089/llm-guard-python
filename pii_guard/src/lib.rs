@@ -153,7 +153,7 @@ fn analyze(text: &str) -> PyResult<Option<SemanticMatchResult>> {
 }
 
 #[pymodule]
-fn llm_guard(m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn _guard(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(load_config, m)?)?;
     m.add_function(wrap_pyfunction!(scan, m)?)?;
     m.add_function(wrap_pyfunction!(log_block, m)?)?;

@@ -52,9 +52,12 @@ def _bootstrap_llm_guard():
     )
     llm_guard.load_config(config_path)
 
-    from llm_guard_hook import LlmGuardFinder
+    from llm_guard_hook import LlmGuardFinder, wrap_urllib3_if_available
 
-    sys.meta_path.insert(0, LlmGuardFinder())
+    # urllib3가 이미 설치되어 있으면 즉시 래핑 (Python 3.12+ 호환)
+    if not wrap_urllib3_if_available():
+        # 아직 임포트 안 된 경우 finder로 지연 래핑
+        sys.meta_path.insert(0, LlmGuardFinder())
 
     print("[LLM_GUARD] 활성화됨", file=sys.stderr)
 
