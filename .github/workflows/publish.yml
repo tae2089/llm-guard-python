@@ -30,8 +30,6 @@ jobs:
           args: --release --out dist --find-interpreter
           sccache: "true"
           manylinux: "2_28"
-          before-script-linux: |
-            dnf install -y cmake gcc-c++ || yum install -y cmake3 gcc-c++
           working-directory: pii_guard
 
       - name: Upload wheels
