@@ -1,0 +1,15 @@
+name: llm-guard-test
+
+services:
+  test:
+    image: python:3.13-slim
+    volumes:
+      - ./config:/app/config:ro
+      - ./tests/smoke_test.py:/app/smoke_test.py:ro
+    working_dir: /app
+    environment:
+      LLM_GUARD_SEMANTIC: "0"
+    command:
+      - bash
+      - -c
+      - pip install llm-guard-python && python smoke_test.py
