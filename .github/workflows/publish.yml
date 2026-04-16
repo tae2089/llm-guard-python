@@ -30,13 +30,6 @@ jobs:
           args: --release --out dist --find-interpreter
           sccache: "true"
           manylinux: "2_28"
-          before-script-linux: |
-            # openssl vendored 빌드에 필요한 perl-core 설치 (x86_64 AlmaLinux 8)
-            if command -v dnf &>/dev/null; then
-              dnf install -y perl-core
-            elif command -v apt-get &>/dev/null; then
-              apt-get install -y perl
-            fi
           working-directory: pii_guard
 
       - name: Upload wheels
@@ -57,9 +50,6 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-
-      - name: Install cmake
-        run: brew install cmake
 
       - name: Build wheels
         uses: PyO3/maturin-action@v1
@@ -84,9 +74,6 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-
-      - name: Install cmake
-        run: choco install cmake --installargs 'ADD_CMAKE_TO_PATH=System' -y
 
       - name: Build wheels
         uses: PyO3/maturin-action@v1
