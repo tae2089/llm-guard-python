@@ -28,7 +28,7 @@ jobs:
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.target }}
-          args: --release --out dist -i 3.9 3.10 3.11 3.12 3.13
+          args: --release --out dist -i 3.13
           sccache: "true"
           manylinux: "2_28"
           before-script-linux: "dnf install -y perl-core 2>/dev/null || apt-get install -y perl 2>/dev/null || true"
@@ -57,7 +57,7 @@ jobs:
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.target }}
-          args: --release --out dist -i 3.9 3.10 3.11 3.12 3.13
+          args: --release --out dist -i 3.13
           sccache: "true"
           working-directory: pii_guard
 
@@ -81,7 +81,7 @@ jobs:
         uses: PyO3/maturin-action@v1
         with:
           target: x86_64
-          args: --release --out dist -i 3.9 3.10 3.11 3.12 3.13
+          args: --release --out dist -i 3.13
           sccache: "true"
           working-directory: pii_guard
 

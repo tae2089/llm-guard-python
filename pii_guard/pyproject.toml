@@ -6,7 +6,7 @@ build-backend = "maturin"
 name = "llm-guard-python"
 version = "0.1.0"
 description = "LLM Guard — PII 탐지 및 프롬프트 인젝션 차단 라이브러리"
-requires-python = ">=3.8"
+requires-python = ">=3.13"
 authors = [
     { name = "tae2089", email = "tae2089002@gmail.com" }
 ]
