@@ -15,8 +15,8 @@ CONFIG_PATH = os.path.join(os.path.dirname(__file__), "..", "config", "pii_patte
 def run_e2e(code, env_extra=None):
     env = os.environ.copy()
     env["PYTHONPATH"] = PYTHON_DIR
-    env["PII_GUARD_CONFIG"] = CONFIG_PATH
-    env.pop("PII_GUARD_DISABLE", None)
+    env["LLM_GUARD_CONFIG"] = CONFIG_PATH
+    env.pop("LLM_GUARD_DISABLE", None)
     if env_extra:
         env.update(env_extra)
     result = subprocess.run(
@@ -30,7 +30,7 @@ def run_e2e(code, env_extra=None):
 def test_e2e_injection_in_body_blocked():
     r = run_e2e("""
         import urllib3
-        from pii_guard_hook import InjectionBlockedError
+        from llm_guard_hook import InjectionBlockedError
 
         http = urllib3.PoolManager()
         try:
@@ -48,7 +48,7 @@ def test_e2e_injection_in_body_blocked():
 def test_e2e_jailbreak_warns_only():
     r = run_e2e("""
         import urllib3
-        from pii_guard_hook import InjectionBlockedError
+        from llm_guard_hook import InjectionBlockedError
 
         http = urllib3.PoolManager()
         try:
@@ -69,7 +69,7 @@ def test_e2e_jailbreak_warns_only():
 def test_e2e_pii_still_blocked():
     r = run_e2e("""
         import urllib3
-        from pii_guard_hook import PiiBlockedError
+        from llm_guard_hook import PiiBlockedError
 
         http = urllib3.PoolManager()
         try:
@@ -87,7 +87,7 @@ def test_e2e_pii_still_blocked():
 def test_e2e_clean_request_passes():
     r = run_e2e("""
         import urllib3.connectionpool
-        assert hasattr(urllib3.connectionpool.HTTPConnectionPool.urlopen, '__pii_guard_wrapped__')
+        assert hasattr(urllib3.connectionpool.HTTPConnectionPool.urlopen, '__llm_guard_wrapped__')
         print("SAFE")
     """)
     assert r.returncode == 0, r.stderr
@@ -97,7 +97,7 @@ def test_e2e_clean_request_passes():
 def test_e2e_semantic_disabled_by_env():
     r = run_e2e("""
         import urllib3
-        from pii_guard_hook import InjectionBlockedError
+        from llm_guard_hook import InjectionBlockedError
 
         http = urllib3.PoolManager()
         try:
@@ -110,7 +110,7 @@ def test_e2e_semantic_disabled_by_env():
             print("INJECTION_BLOCKED")
         except Exception:
             print("PASSED_THROUGH")
-    """, env_extra={"PII_GUARD_SEMANTIC": "0"})
+    """, env_extra={"LLM_GUARD_SEMANTIC": "0"})
     assert r.returncode == 0, r.stderr
     assert "PASSED_THROUGH" in r.stdout
 
@@ -118,7 +118,7 @@ def test_e2e_semantic_disabled_by_env():
 def test_e2e_korean_injection_blocked():
     r = run_e2e("""
         import urllib3
-        from pii_guard_hook import InjectionBlockedError
+        from llm_guard_hook import InjectionBlockedError
 
         http = urllib3.PoolManager()
         try:

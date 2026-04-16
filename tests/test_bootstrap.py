@@ -11,7 +11,7 @@ CONFIG_PATH = os.path.join(os.path.dirname(__file__), "..", "config", "pii_patte
 def run_with_sitecustomize(code, env_extra=None):
     env = os.environ.copy()
     env["PYTHONPATH"] = PYTHON_DIR
-    env["PII_GUARD_CONFIG"] = CONFIG_PATH
+    env["LLM_GUARD_CONFIG"] = CONFIG_PATH
     if env_extra:
         env.update(env_extra)
     result = subprocess.run(
@@ -25,27 +25,27 @@ def test_sitecustomize_activates():
     r = run_with_sitecustomize("""
         import sitecustomize
         import sys
-        from pii_guard_hook import PiiGuardFinder
-        assert any(isinstance(f, PiiGuardFinder) for f in sys.meta_path)
+        from llm_guard_hook import LlmGuardFinder
+        assert any(isinstance(f, LlmGuardFinder) for f in sys.meta_path)
     """)
     assert r.returncode == 0, r.stderr
-    assert "[PII_GUARD] 활성화됨" in r.stderr
+    assert "[LLM_GUARD] 활성화됨" in r.stderr
 
 
 def test_sitecustomize_disabled():
     r = run_with_sitecustomize("""
         import sitecustomize
         import sys
-        from pii_guard_hook import PiiGuardFinder
-        assert not any(isinstance(f, PiiGuardFinder) for f in sys.meta_path)
-    """, env_extra={"PII_GUARD_DISABLE": "1"})
+        from llm_guard_hook import LlmGuardFinder
+        assert not any(isinstance(f, LlmGuardFinder) for f in sys.meta_path)
+    """, env_extra={"LLM_GUARD_DISABLE": "1"})
     assert r.returncode == 0, r.stderr
-    assert "[PII_GUARD] 활성화됨" not in r.stderr
+    assert "[LLM_GUARD] 활성화됨" not in r.stderr
 
 
 def test_sitecustomize_bad_config_does_not_crash():
     r = run_with_sitecustomize("""
         print("python started ok")
-    """, env_extra={"PII_GUARD_CONFIG": "/nonexistent/path.toml"})
+    """, env_extra={"LLM_GUARD_CONFIG": "/nonexistent/path.toml"})
     assert r.returncode == 0, r.stderr
-    assert "[PII_GUARD] 초기화 실패" in r.stderr
+    assert "[LLM_GUARD] 초기화 실패" in r.stderr

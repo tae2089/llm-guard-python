@@ -1,5 +1,5 @@
 """
-PII Guard 데모 스크립트
+LLM Guard 데모 스크립트
 
 사용법:
   .venv/bin/python demo.py
@@ -10,12 +10,12 @@ import sys
 # 경로 자동 설정
 ROOT = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(ROOT, "python"))
-os.environ.setdefault("PII_GUARD_CONFIG", os.path.join(ROOT, "config", "pii_patterns.toml"))
+os.environ.setdefault("LLM_GUARD_CONFIG", os.path.join(ROOT, "config", "pii_patterns.toml"))
 
 import sitecustomize
 
 import urllib3
-from pii_guard_hook import PiiBlockedError, InjectionBlockedError
+from llm_guard_hook import PiiBlockedError, InjectionBlockedError
 
 http = urllib3.PoolManager()
 URL = "http://httpbin.org/post"

@@ -47,8 +47,8 @@ fn load_config(path: &str) -> PyResult<()> {
     DETECTOR.set(detector)
         .map_err(|_| PyRuntimeError::new_err("load_config already called"))?;
 
-    let log_path = std::env::var("PII_GUARD_LOG")
-        .unwrap_or_else(|_| "pii_guard.log".to_string());
+    let log_path = std::env::var("LLM_GUARD_LOG")
+        .unwrap_or_else(|_| "llm_guard.log".to_string());
     LOGGER.set(Logger::new(&log_path))
         .map_err(|_| PyRuntimeError::new_err("logger already initialized"))?;
 
@@ -79,7 +79,7 @@ fn get_semantic_config() -> PyResult<Option<PyObject>> {
     let config_path = CONFIG_PATH.get()
         .ok_or_else(|| PyRuntimeError::new_err("load_config not called"))?;
 
-    if std::env::var("PII_GUARD_SEMANTIC").unwrap_or_default() == "0" {
+    if std::env::var("LLM_GUARD_SEMANTIC").unwrap_or_default() == "0" {
         return Ok(None);
     }
 
@@ -107,11 +107,11 @@ fn init_semantic(db_path: &str, seed_path: &str, injection_threshold: f32, jailb
     match config::load_seed_vectors(seed_path) {
         Ok(vectors) => {
             if let Err(e) = analyzer.seed_vectors(&vectors) {
-                eprintln!("[PII_GUARD] 시드 벡터 삽입 경고: {}", e);
+                eprintln!("[LLM_GUARD] 시드 벡터 삽입 경고: {}", e);
             }
         }
         Err(e) => {
-            eprintln!("[PII_GUARD] 시드 파일 로드 경고: {}", e);
+            eprintln!("[LLM_GUARD] 시드 파일 로드 경고: {}", e);
         }
     }
 
@@ -153,7 +153,7 @@ fn analyze(text: &str) -> PyResult<Option<SemanticMatchResult>> {
 }
 
 #[pymodule]
-fn pii_guard(m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn llm_guard(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(load_config, m)?)?;
     m.add_function(wrap_pyfunction!(scan, m)?)?;
     m.add_function(wrap_pyfunction!(log_block, m)?)?;

@@ -16,9 +16,9 @@ CONFIG_PATH = os.path.join(os.path.dirname(__file__), "..", "config", "pii_patte
 def run_e2e(code, env_extra=None):
     env = os.environ.copy()
     env["PYTHONPATH"] = PYTHON_DIR
-    env["PII_GUARD_CONFIG"] = CONFIG_PATH
-    # Do NOT set PII_GUARD_DISABLE — we want sitecustomize to auto-bootstrap
-    env.pop("PII_GUARD_DISABLE", None)
+    env["LLM_GUARD_CONFIG"] = CONFIG_PATH
+    # Do NOT set LLM_GUARD_DISABLE — we want sitecustomize to auto-bootstrap
+    env.pop("LLM_GUARD_DISABLE", None)
     if env_extra:
         env.update(env_extra)
     result = subprocess.run(
@@ -36,7 +36,7 @@ def test_e2e_pii_in_body_blocked():
     r = run_e2e("""
         # sitecustomize already auto-loaded via PYTHONPATH
         import urllib3
-        from pii_guard_hook import PiiBlockedError
+        from llm_guard_hook import PiiBlockedError
 
         http = urllib3.PoolManager()
         try:
@@ -47,7 +47,7 @@ def test_e2e_pii_in_body_blocked():
         except PiiBlockedError as e:
             print("BLOCKED")
             print(str(e))
-    """, env_extra={"PII_GUARD_LOG": log_path})
+    """, env_extra={"LLM_GUARD_LOG": log_path})
 
     assert r.returncode == 0, r.stderr
     assert "BLOCKED" in r.stdout
@@ -63,7 +63,7 @@ def test_e2e_pii_in_header_blocked():
     """header에 전화번호 → 차단"""
     r = run_e2e("""
         import urllib3
-        from pii_guard_hook import PiiBlockedError
+        from llm_guard_hook import PiiBlockedError
 
         http = urllib3.PoolManager()
         try:
@@ -83,7 +83,7 @@ def test_e2e_clean_request_not_blocked():
         import urllib3.connectionpool
 
         # 래핑이 적용되었는지만 확인 (실제 네트워크 호출 X)
-        assert hasattr(urllib3.connectionpool.HTTPConnectionPool.urlopen, '__pii_guard_wrapped__')
+        assert hasattr(urllib3.connectionpool.HTTPConnectionPool.urlopen, '__llm_guard_wrapped__')
         print("WRAPPED_OK")
     """)
     assert r.returncode == 0, r.stderr
@@ -94,7 +94,7 @@ def test_e2e_credit_card_in_body_blocked():
     """body에 신용카드번호 → 차단"""
     r = run_e2e("""
         import urllib3
-        from pii_guard_hook import PiiBlockedError
+        from llm_guard_hook import PiiBlockedError
 
         http = urllib3.PoolManager()
         try:
@@ -113,7 +113,7 @@ def test_e2e_email_in_body_blocked():
     """body에 이메일 → 차단"""
     r = run_e2e("""
         import urllib3
-        from pii_guard_hook import PiiBlockedError
+        from llm_guard_hook import PiiBlockedError
 
         http = urllib3.PoolManager()
         try:
@@ -129,13 +129,13 @@ def test_e2e_email_in_body_blocked():
 
 
 def test_e2e_disabled_via_env():
-    """PII_GUARD_DISABLE=1 → PII가 있어도 차단 안 됨"""
+    """LLM_GUARD_DISABLE=1 → PII가 있어도 차단 안 됨"""
     r = run_e2e("""
         import urllib3.connectionpool
 
         # 비활성화되면 래핑이 적용되지 않음
-        has_wrap = hasattr(urllib3.connectionpool.HTTPConnectionPool.urlopen, '__pii_guard_wrapped__')
+        has_wrap = hasattr(urllib3.connectionpool.HTTPConnectionPool.urlopen, '__llm_guard_wrapped__')
         print(f"wrapped={has_wrap}")
-    """, env_extra={"PII_GUARD_DISABLE": "1"})
+    """, env_extra={"LLM_GUARD_DISABLE": "1"})
     assert r.returncode == 0, r.stderr
     assert "wrapped=False" in r.stdout
