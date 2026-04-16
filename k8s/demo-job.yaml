@@ -1,0 +1,35 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: llm-guard-demo
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      volumes:
+        - name: llm-guard
+          emptyDir: {}
+
+      initContainers:
+        - name: llm-guard-init
+          image: llm-guard-init:local
+          command: ["cp", "-r", "/opt/llm-guard/.", "/opt/llm-guard-shared/"]
+          volumeMounts:
+            - name: llm-guard
+              mountPath: /opt/llm-guard-shared
+
+      containers:
+        - name: app
+          image: llm-guard-app:local
+          env:
+            - name: PYTHONPATH
+              value: "/opt/llm-guard/site-packages/llm_guard/_boot:/opt/llm-guard/site-packages"
+            - name: LLM_GUARD_CONFIG
+              value: "/opt/llm-guard/config/pii_patterns.toml"
+            - name: LLM_GUARD_SEMANTIC
+              value: "0"
+          volumeMounts:
+            - name: llm-guard
+              mountPath: /opt/llm-guard
+              readOnly: true

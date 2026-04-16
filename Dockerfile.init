@@ -1,0 +1,17 @@
+# llm-guard-init: K8s init container 이미지
+# 사용법: init container에서 cp -r /opt/llm-guard/. /shared/ 로 복사
+
+FROM python:3.13-slim AS builder
+RUN apt-get update && apt-get install -y curl build-essential pkg-config perl && rm -rf /var/lib/apt/lists/*
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+ENV PATH="/root/.cargo/bin:$PATH"
+RUN pip install maturin
+WORKDIR /build
+COPY pii_guard/ ./pii_guard/
+RUN cd pii_guard && maturin build --release --out /build/dist
+RUN pip install --target=/opt/llm-guard/site-packages /build/dist/*.whl
+
+FROM busybox:latest
+COPY --from=builder /opt/llm-guard/site-packages /opt/llm-guard/site-packages
+COPY config/ /opt/llm-guard/config/
+CMD ["cp", "-r", "/opt/llm-guard/.", "/shared/"]
