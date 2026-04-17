@@ -1,6 +1,6 @@
 [package]
 name = "llm_guard"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 
 [lib]
@@ -8,7 +8,7 @@ name = "_guard"
 crate-type = ["cdylib"]
 
 [dependencies]
-pyo3 = { version = "0.22", features = ["extension-module"] }
+pyo3 = { version = "0.22", features = ["extension-module", "abi3-py39"] }
 regex = "1"
 serde = { version = "1", features = ["derive"] }
 toml = "0.8"
