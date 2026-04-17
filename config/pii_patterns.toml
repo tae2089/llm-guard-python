@@ -30,3 +30,8 @@ db_path = "attack_vectors.duckdb"
 seed_path = "attack_vectors.toml"
 injection_threshold = 0.85
 jailbreak_threshold = 0.80
+
+[response]
+enabled = true
+action = "redact"
+max_body_bytes = 1048576

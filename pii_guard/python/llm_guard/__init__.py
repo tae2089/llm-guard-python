@@ -9,8 +9,10 @@ LLM Guard - PII 탐지 및 프롬프트 인젝션 차단 라이브러리
 from llm_guard._guard import (
     load_config,
     scan,
+    mask,
     log_block,
     get_semantic_config,
+    get_response_config,
     init_semantic,
     analyze,
     ScanResult,
@@ -24,8 +26,10 @@ from llm_guard._hook import (
 __all__ = [
     "load_config",
     "scan",
+    "mask",
     "log_block",
     "get_semantic_config",
+    "get_response_config",
     "init_semantic",
     "analyze",
     "ScanResult",

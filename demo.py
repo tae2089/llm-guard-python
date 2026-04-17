@@ -4,6 +4,9 @@ LLM Guard 데모 스크립트
 사용법:
   .venv/bin/python demo.py
 """
+import http.server
+import socket
+import threading
 import os
 import sys
 
@@ -17,8 +20,36 @@ import sitecustomize
 import urllib3
 from llm_guard_hook import PiiBlockedError, InjectionBlockedError
 
-http = urllib3.PoolManager()
+pool = urllib3.PoolManager()
 URL = "http://httpbin.org/post"
+
+
+def _start_fake_llm_server(response_body: str, content_type: str = "application/json"):
+    """PII를 포함한 응답을 돌려주는 가짜 LLM API 서버"""
+    body_bytes = response_body.encode("utf-8")
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_POST(self):
+            length = int(self.headers.get("Content-Length", 0))
+            if length:
+                self.rfile.read(length)
+            self.send_response(200)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Length", str(len(body_bytes)))
+            self.end_headers()
+            self.wfile.write(body_bytes)
+
+        def log_message(self, *args, **kwargs):
+            pass
+
+    s = socket.socket()
+    s.bind(("127.0.0.1", 0))
+    port = s.getsockname()[1]
+    s.close()
+
+    srv = http.server.HTTPServer(("127.0.0.1", port), Handler)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    return srv, port
 
 
 def test_request(name, body, headers=None):
@@ -29,7 +60,7 @@ def test_request(name, body, headers=None):
     print(f"  body: {body[:80]}{'...' if len(body) > 80 else ''}")
     print(f"{'='*60}")
     try:
-        resp = http.request("POST", URL, body=body, headers=headers)
+        resp = pool.request("POST", URL, body=body, headers=headers)
         print(f"  -> 통과 (status {resp.status})")
     except PiiBlockedError as e:
         print(f"  -> PII 차단: {e}")
@@ -94,6 +125,45 @@ if __name__ == "__main__":
         '{"message": "Hello, world!"}',
         {"Content-Type": "application/json"},
     )
+
+    # --- Layer 3: 응답 스캔 ---
+    print(f"\n{'='*60}")
+    print("  Layer 3: 응답 PII 스캔 (LLM 응답 유출 방지)")
+    print("=" * 60)
+
+    srv, port = _start_fake_llm_server(
+        '{"choices": [{"message": {"content": "담당자 이메일은 admin@corp.com, 전화는 010-9876-5432 입니다."}}]}'
+    )
+    fake_url = f"http://127.0.0.1:{port}/"
+
+    print("\n[TEST] 응답 body에 이메일 + 전화번호 → 마스킹 (redact)")
+    print(f"  fake LLM API: {fake_url}")
+    try:
+        resp = pool.request("POST", fake_url, body='{"prompt": "담당자 알려줘"}',
+                            headers={"Content-Type": "application/json"})
+        body = resp.data.decode("utf-8")
+        print(f"  -> 응답: {body}")
+    except PiiBlockedError as e:
+        print(f"  -> 차단: {e}")
+    except Exception as e:
+        print(f"  -> 기타 에러: {type(e).__name__}: {e}")
+
+    srv.shutdown()
+
+    srv2, port2 = _start_fake_llm_server(
+        '{"result": "정상 응답입니다. 개인정보 없음."}'
+    )
+    fake_url2 = f"http://127.0.0.1:{port2}/"
+
+    print("\n[TEST] 응답 body에 PII 없음 → 그대로 반환")
+    try:
+        resp = pool.request("POST", fake_url2, body='{"query": "오늘 날씨 알려줘"}',
+                            headers={"Content-Type": "application/json"})
+        print(f"  -> 응답: {resp.data.decode('utf-8')}")
+    except Exception as e:
+        print(f"  -> 기타 에러: {type(e).__name__}: {e}")
+
+    srv2.shutdown()
 
     print(f"\n{'='*60}")
     print("  데모 완료")

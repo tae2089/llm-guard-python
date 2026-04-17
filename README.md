@@ -49,29 +49,46 @@ export LLM_GUARD_DISABLE=1   # 전체 비활성화 (선택)
 
 ## 탐지 레이어
 
-| 레이어 | 방식 | 동작 |
-|--------|------|------|
-| Layer 1 | 정규식 PII 탐지 | 이메일, 전화번호, 주민번호, 신용카드 등 → 즉시 차단 |
-| Layer 2 | 임베딩 유사도 (fastembed) | 프롬프트 인젝션 → 차단, 탈옥 시도 → 경고 |
+| 레이어 | 방향 | 방식 | 동작 |
+|--------|------|------|------|
+| Layer 1 | 요청 | 정규식 PII 탐지 | 이메일, 전화번호, 주민번호, 신용카드 등 → 즉시 차단 |
+| Layer 2 | 요청 | 임베딩 유사도 (fastembed) | 프롬프트 인젝션 → 차단, 탈옥 시도 → 경고 |
+| Layer 3 | 응답 | 정규식 PII 탐지 | LLM 응답의 PII 유출 → 마스킹 또는 차단 |
 
 ## 설정 파일 (pii_patterns.toml)
 
 ```toml
-[[patterns]]
+[patterns]
+
+[patterns.email]
 name = "이메일"
 regex = '[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'
-action = "block"
 
-[[patterns]]
+[patterns.phone]
 name = "전화번호"
 regex = '01[016789]-?\d{3,4}-?\d{4}'
-action = "block"
 
-[[patterns]]
+[patterns.resident_id]
 name = "주민등록번호"
 regex = '\d{6}-?[1-4]\d{6}'
-action = "block"
+
+# 응답 스캔 (LLM 응답의 PII 유출 방지)
+[response]
+enabled = true
+action = "redact"      # "redact" | "block" | "warn"
+max_body_bytes = 1048576  # 1MB 초과 응답은 스캔 skip
 ```
+
+### 응답 스캔 action
+
+| action | 동작 |
+|--------|------|
+| `redact` | PII를 `[REDACTED:패턴명]`으로 치환 후 앱에 반환 (기본값) |
+| `block` | PII 발견 시 `PiiBlockedError` 발생 |
+| `warn` | 로그 기록만, 응답 내용 변경 없음 |
+
+> **주의:** `[response]` 섹션이 없거나 `enabled = false`이면 응답 스캔은 비활성입니다.  
+> Content-Type이 바이너리(image/*, application/octet-stream 등)인 응답은 항상 skip합니다.
 
 ## 예외 처리
 
@@ -81,6 +98,7 @@ from llm_guard import PiiBlockedError, InjectionBlockedError
 try:
     response = client.chat.completions.create(...)
 except PiiBlockedError as e:
+    # 요청 PII 차단 또는 응답 PII 차단(action="block") 시 발생
     print(f"PII 차단: {e}")
 except InjectionBlockedError as e:
     print(f"인젝션 차단: {e}")

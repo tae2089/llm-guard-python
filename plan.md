@@ -49,3 +49,50 @@
 - [x] e2e: PII 여전히 차단 (회귀)
 - [x] e2e: PII_GUARD_SEMANTIC=0 → 비활성
 - [x] e2e: 한국어 injection 차단
+
+## Response Scanning 테스트
+### Rust 단위 테스트
+- [x] detector: mask() 모든 매치를 `[REDACTED:<name>]`로 치환
+- [x] detector: mask() 매치 없으면 원문 + 빈 리스트
+- [x] detector: mask() 여러 패턴/여러 매치 동시 치환
+- [x] config: [response] 섹션 파싱 (enabled, action, max_body_bytes)
+- [x] config: [response] 섹션 없음 → None (기본 비활성)
+- [x] config: response disabled → None
+- [x] lib: PyO3 mask 인터페이스 (masked_text, matches 튜플 반환)
+- [x] lib: PyO3 get_response_config 인터페이스
+
+### Python 통합 테스트 + E2E
+- [x] e2e: 응답 body에 이메일 → 마스킹된 body 수신 (redact)
+- [x] e2e: 응답 body에 PII + action=block → 예외
+- [x] e2e: 바이너리 응답 (Content-Type=image/png) → 수정 없이 통과
+- [x] e2e: [response] 섹션 없음 → 응답 PII 그대로 통과 (비활성)
+- [x] e2e: 응답 스캔 활성 시에도 요청 PII 차단 유지 (회귀)
+- [ ] hook: action=warn → 로그만, body 그대로 (Phase 2)
+- [ ] hook: max_body_bytes 초과 시 skip (Phase 2)
+- [ ] hook: preload_content=False(streaming) (Phase 2)
+
+## Streaming Response Scan (Phase 2)
+### Rust 단위 테스트
+- [x] config: [response] stream_enabled=false 파싱 → 필드 false
+- [x] config: stream_lookback_bytes 기본값 256 (필드 없음)
+- [x] config: stream_enabled 기본값 true (필드 없음, 하위호환)
+- [x] config: stream_lookback_bytes 커스텀 값 파싱
+
+### Python 단위 테스트 — StreamingScanner
+- [x] scanner: 짧은 청크(< lookback) → feed는 b"" 리턴
+- [x] scanner: 긴 청크 PII 없음 → buf[:-K]만큼 그대로 방출
+- [x] scanner: 긴 청크 내부 PII → [REDACTED:이메일] 치환 방출
+- [x] scanner: 청크 경계 PII (user@exa + mple.com) → 마스킹
+- [x] scanner: flush()가 남은 버퍼 방출
+- [x] scanner: UTF-8 한글 경계 (3바이트 절단) → 끊지 않고 hold
+- [x] scanner: action=block → redact 다운그레이드 + stderr 경고 1회
+- [x] scanner: action=warn → 원본 그대로 + 로그
+- [x] scanner: action=redact, PII 없음 → 원본 그대로
+
+### Python e2e
+- [x] e2e: preload_content=False + resp.stream() → 마스킹된 청크
+- [x] e2e: SSE text/event-stream + 다중 data: 줄 → 마스킹 + 포맷 보존
+- [x] e2e: stream_enabled=false → 래핑 skip
+- [x] e2e: 바이너리 스트림(image/png, preload=False) → 래핑 skip
+- [x] e2e: 비스트리밍 경로 회귀 (Phase 1 동작 불변)
+- [x] e2e: action=block + 스트림 → redact 다운그레이드

@@ -82,12 +82,130 @@ def wrap_urllib3_if_available():
         return False
 
 
+_TEXT_CONTENT_TYPES = ("application/json", "text/", "application/xml", "application/x-www-form-urlencoded")
+
+
+def _is_text_content_type(ct):
+    if not ct:
+        return False
+    ct_lower = ct.lower()
+    return any(ct_lower.startswith(t) for t in _TEXT_CONTENT_TYPES)
+
+
+def _attach_streaming_scanner(resp, method, url, response_config):
+    """preload_content=False 응답에 StreamingScanner를 붙여 resp.read를 래핑."""
+    from llm_guard._streaming import StreamingScanner
+
+    if getattr(resp, "__llm_guard_streaming__", False):
+        return
+    headers = getattr(resp, "headers", None)
+    content_type = headers.get("Content-Type", "") if headers else ""
+    if not _is_text_content_type(content_type):
+        return
+
+    if not response_config.get("stream_enabled", True):
+        return
+
+    # HIGH-1: race condition 방지를 위해 래핑 전에 플래그 먼저 세팅
+    resp.__llm_guard_streaming__ = True
+
+    scanner = StreamingScanner(
+        action=response_config.get("action", "redact"),
+        lookback_bytes=response_config.get("stream_lookback_bytes", 256),
+    )
+    original_read = resp.read
+    original_read_chunked = getattr(resp, "read_chunked", None)
+
+    def wrapped_read(amt=None, *args, **kwargs):
+        # CRITICAL-1: 재귀 대신 while 루프 — 작은 청크 연속 시 스택 오버플로 방지
+        while True:
+            chunk = original_read(amt, *args, **kwargs)
+            if not chunk:
+                tail = scanner.flush()
+                return tail if tail else chunk
+            processed = scanner.feed(chunk)
+            if processed:
+                return processed
+
+    resp.read = wrapped_read
+
+    if original_read_chunked is not None:
+        def wrapped_read_chunked(amt=None, decode_content=None):
+            for raw in original_read_chunked(amt, decode_content=decode_content):
+                processed = scanner.feed(raw)
+                if processed:
+                    yield processed
+            tail = scanner.flush()
+            if tail:
+                yield tail
+
+        resp.read_chunked = wrapped_read_chunked
+
+
+def _scan_response(resp, method, url, response_config):
+    """응답 body를 스캔. action에 따라 마스킹/차단/경고."""
+    from llm_guard._guard import mask, scan, log_block
+
+    body = getattr(resp, "_body", None)
+    if body is None:
+        _attach_streaming_scanner(resp, method, url, response_config)
+        return
+
+    headers = getattr(resp, "headers", None)
+    content_type = headers.get("Content-Type", "") if headers else ""
+    if not _is_text_content_type(content_type):
+        return
+
+    max_bytes = response_config.get("max_body_bytes", 1048576)
+    if len(body) > max_bytes:
+        return
+
+    try:
+        text = body.decode("utf-8") if isinstance(body, bytes) else str(body)
+    except UnicodeDecodeError:
+        return
+
+    action = response_config.get("action", "redact")
+
+    if action == "block":
+        result = scan(text)
+        if result:
+            log_block(method, str(url), f"response:{result.pattern_name}", result.matched_value)
+            raise PiiBlockedError(
+                f"[LLM_GUARD] 응답 차단: {method} {url} - {result.pattern_name} 발견"
+            )
+        return
+
+    masked_text, matches = mask(text)
+    if not matches:
+        return
+
+    for m in matches:
+        log_block(method, str(url), f"response:{m.pattern_name}", m.matched_value)
+
+    if action == "warn":
+        print(
+            f"[LLM_GUARD] 응답 경고: {method} {url} - {len(matches)}개 PII 감지",
+            file=sys.stderr,
+        )
+        return
+
+    resp._body = masked_text.encode("utf-8")
+    print(
+        f"[LLM_GUARD] 응답 마스킹: {method} {url} - {len(matches)}개 PII 치환",
+        file=sys.stderr,
+    )
+
+
 def _wrap_urlopen(connectionpool_module):
     """HTTPConnectionPool.urlopen을 래핑"""
     original = connectionpool_module.HTTPConnectionPool.urlopen
 
     def wrapped_urlopen(self, method, url, body=None, headers=None, **kwargs):
-        from llm_guard._guard import scan, log_block, analyze
+        from llm_guard._guard import scan, analyze, get_response_config
+
+        # HIGH-2: 매 요청마다 평가 — load_config 재호출 시에도 최신 설정 반영
+        response_config = get_response_config()
 
         # --- Layer 1: PII 정규식 ---
         if headers:
@@ -122,7 +240,12 @@ def _wrap_urlopen(connectionpool_module):
             except Exception as e:
                 print(f"[LLM_GUARD] Layer 2 분석 오류: {e}", file=sys.stderr)
 
-        return original(self, method, url, body=body, headers=headers, **kwargs)
+        resp = original(self, method, url, body=body, headers=headers, **kwargs)
+
+        if response_config is not None:
+            _scan_response(resp, method, url, response_config)
+
+        return resp
 
     wrapped_urlopen.__llm_guard_wrapped__ = True
     connectionpool_module.HTTPConnectionPool.urlopen = wrapped_urlopen

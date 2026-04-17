@@ -67,6 +67,40 @@ fn scan(text: &str) -> PyResult<Option<ScanResult>> {
 }
 
 #[pyfunction]
+fn mask(text: &str) -> PyResult<(String, Vec<ScanResult>)> {
+    let detector = DETECTOR.get()
+        .ok_or_else(|| PyRuntimeError::new_err("load_config not called"))?;
+
+    let (masked, matches) = detector.mask(text);
+    let results = matches.into_iter().map(|m| ScanResult {
+        pattern_name: m.pattern_name,
+        matched_value: m.matched_value,
+    }).collect();
+    Ok((masked, results))
+}
+
+#[pyfunction]
+fn get_response_config() -> PyResult<Option<PyObject>> {
+    let config_path = CONFIG_PATH.get()
+        .ok_or_else(|| PyRuntimeError::new_err("load_config not called"))?;
+
+    let rc = config::load_response_config(config_path)
+        .map_err(|e| PyRuntimeError::new_err(e))?;
+
+    match rc {
+        None => Ok(None),
+        Some(rc) => Python::with_gil(|py| {
+            let dict = pyo3::types::PyDict::new_bound(py);
+            dict.set_item("action", rc.action)?;
+            dict.set_item("max_body_bytes", rc.max_body_bytes)?;
+            dict.set_item("stream_enabled", rc.stream_enabled)?;
+            dict.set_item("stream_lookback_bytes", rc.stream_lookback_bytes)?;
+            Ok(Some(dict.unbind().into()))
+        }),
+    }
+}
+
+#[pyfunction]
 fn log_block(method: &str, url: &str, pattern_name: &str, matched_value: &str) -> PyResult<()> {
     let logger = LOGGER.get()
         .ok_or_else(|| PyRuntimeError::new_err("logger not initialized"))?;
@@ -156,8 +190,10 @@ fn analyze(text: &str) -> PyResult<Option<SemanticMatchResult>> {
 fn _guard(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(load_config, m)?)?;
     m.add_function(wrap_pyfunction!(scan, m)?)?;
+    m.add_function(wrap_pyfunction!(mask, m)?)?;
     m.add_function(wrap_pyfunction!(log_block, m)?)?;
     m.add_function(wrap_pyfunction!(get_semantic_config, m)?)?;
+    m.add_function(wrap_pyfunction!(get_response_config, m)?)?;
     m.add_function(wrap_pyfunction!(init_semantic, m)?)?;
     m.add_function(wrap_pyfunction!(analyze, m)?)?;
     m.add_class::<ScanResult>()?;

@@ -31,6 +31,45 @@ impl PiiDetector {
         }
         None
     }
+
+    pub fn mask(&self, text: &str) -> (String, Vec<ScanMatch>) {
+        let mut matches: Vec<(usize, usize, String, String)> = Vec::new();
+        for pattern in &self.patterns {
+            for m in pattern.compiled.find_iter(text) {
+                matches.push((
+                    m.start(),
+                    m.end(),
+                    pattern.name.clone(),
+                    m.as_str().to_string(),
+                ));
+            }
+        }
+
+        matches.sort_by_key(|(start, _, _, _)| *start);
+        let mut deduped: Vec<(usize, usize, String, String)> = Vec::new();
+        let mut last_end = 0usize;
+        for entry in matches {
+            if entry.0 >= last_end {
+                last_end = entry.1;
+                deduped.push(entry);
+            }
+        }
+
+        let mut out = String::with_capacity(text.len());
+        let mut cursor = 0usize;
+        let mut scan_matches = Vec::with_capacity(deduped.len());
+        for (start, end, name, value) in deduped {
+            out.push_str(&text[cursor..start]);
+            out.push_str(&format!("[REDACTED:{}]", name));
+            cursor = end;
+            scan_matches.push(ScanMatch {
+                pattern_name: name,
+                matched_value: value,
+            });
+        }
+        out.push_str(&text[cursor..]);
+        (out, scan_matches)
+    }
 }
 
 #[cfg(test)]
@@ -117,6 +156,47 @@ mod tests {
         let result = detector.scan("여권번호 M12345678");
         assert!(result.is_some());
         assert_eq!(result.unwrap().matched_value, "M12345678");
+    }
+
+    #[test]
+    fn test_mask_replaces_all_occurrences_with_redacted_token() {
+        let detector = make_detector_with_pattern(
+            "이메일",
+            r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}",
+        );
+        let (masked, matches) = detector.mask("연락은 a@x.com 또는 b@y.io 로 주세요");
+        assert_eq!(masked, "연락은 [REDACTED:이메일] 또는 [REDACTED:이메일] 로 주세요");
+        assert_eq!(matches.len(), 2);
+        assert_eq!(matches[0].matched_value, "a@x.com");
+        assert_eq!(matches[1].matched_value, "b@y.io");
+    }
+
+    #[test]
+    fn test_mask_returns_original_text_when_no_match() {
+        let detector = make_detector_with_pattern(
+            "이메일",
+            r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}",
+        );
+        let (masked, matches) = detector.mask("오늘 날씨가 좋습니다");
+        assert_eq!(masked, "오늘 날씨가 좋습니다");
+        assert!(matches.is_empty());
+    }
+
+    #[test]
+    fn test_mask_multiple_patterns_simultaneously() {
+        let detector = PiiDetector::new(vec![
+            PiiPattern {
+                name: "이메일".to_string(),
+                compiled: regex::Regex::new(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}").unwrap(),
+            },
+            PiiPattern {
+                name: "전화번호".to_string(),
+                compiled: regex::Regex::new(r"01[016789]-?\d{3,4}-?\d{4}").unwrap(),
+            },
+        ]);
+        let (masked, matches) = detector.mask("메일 a@b.com, 폰 010-1234-5678");
+        assert_eq!(masked, "메일 [REDACTED:이메일], 폰 [REDACTED:전화번호]");
+        assert_eq!(matches.len(), 2);
     }
 
     #[test]

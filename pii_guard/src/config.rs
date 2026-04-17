@@ -46,10 +46,30 @@ pub struct SemanticConfig {
     pub jailbreak_threshold: f32,
 }
 
+fn default_stream_enabled() -> bool {
+    true
+}
+
+fn default_stream_lookback_bytes() -> usize {
+    256
+}
+
+#[derive(Deserialize, Clone, Debug)]
+pub struct ResponseConfig {
+    pub enabled: bool,
+    pub action: String,
+    pub max_body_bytes: usize,
+    #[serde(default = "default_stream_enabled")]
+    pub stream_enabled: bool,
+    #[serde(default = "default_stream_lookback_bytes")]
+    pub stream_lookback_bytes: usize,
+}
+
 #[derive(Deserialize)]
 pub struct FullConfig {
     pub patterns: HashMap<String, PatternEntry>,
     pub semantic: Option<SemanticConfig>,
+    pub response: Option<ResponseConfig>,
 }
 
 pub fn load_semantic_config(path: &str) -> Result<Option<SemanticConfig>, String> {
@@ -61,6 +81,19 @@ pub fn load_semantic_config(path: &str) -> Result<Option<SemanticConfig>, String
     match config.semantic {
         Some(ref sc) if !sc.enabled => Ok(None),
         Some(sc) => Ok(Some(sc)),
+        None => Ok(None),
+    }
+}
+
+pub fn load_response_config(path: &str) -> Result<Option<ResponseConfig>, String> {
+    let content = std::fs::read_to_string(path)
+        .map_err(|e| format!("설정 파일 읽기 실패: {}", e))?;
+    let config: FullConfig = toml::from_str(&content)
+        .map_err(|e| format!("설정 파일 파싱 실패: {}", e))?;
+
+    match config.response {
+        Some(ref rc) if !rc.enabled => Ok(None),
+        Some(rc) => Ok(Some(rc)),
         None => Ok(None),
     }
 }
@@ -185,6 +218,128 @@ regex = '01[016789]-?\d{3,4}-?\d{4}'
 "#);
         let sc = load_semantic_config(config.path().to_str().unwrap()).unwrap();
         assert!(sc.is_none());
+    }
+
+    #[test]
+    fn test_load_response_config_enabled() {
+        let config = write_temp_config(r#"
+[patterns]
+[patterns.email]
+name = "이메일"
+regex = '[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'
+
+[response]
+enabled = true
+action = "redact"
+max_body_bytes = 1048576
+"#);
+        let rc = load_response_config(config.path().to_str().unwrap()).unwrap();
+        assert!(rc.is_some());
+        let rc = rc.unwrap();
+        assert_eq!(rc.action, "redact");
+        assert_eq!(rc.max_body_bytes, 1048576);
+    }
+
+    #[test]
+    fn test_load_response_config_missing_section() {
+        let config = write_temp_config(r#"
+[patterns]
+[patterns.email]
+name = "이메일"
+regex = '[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'
+"#);
+        let rc = load_response_config(config.path().to_str().unwrap()).unwrap();
+        assert!(rc.is_none());
+    }
+
+    #[test]
+    fn test_load_response_config_disabled() {
+        let config = write_temp_config(r#"
+[patterns]
+[patterns.email]
+name = "이메일"
+regex = '[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'
+
+[response]
+enabled = false
+action = "redact"
+max_body_bytes = 1048576
+"#);
+        let rc = load_response_config(config.path().to_str().unwrap()).unwrap();
+        assert!(rc.is_none());
+    }
+
+    #[test]
+    fn test_load_response_config_stream_lookback_defaults_256() {
+        let config = write_temp_config(r#"
+[patterns]
+[patterns.email]
+name = "이메일"
+regex = '[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'
+
+[response]
+enabled = true
+action = "redact"
+max_body_bytes = 1048576
+"#);
+        let rc = load_response_config(config.path().to_str().unwrap()).unwrap().unwrap();
+        assert_eq!(rc.stream_lookback_bytes, 256);
+    }
+
+    #[test]
+    fn test_load_response_config_stream_lookback_custom() {
+        let config = write_temp_config(r#"
+[patterns]
+[patterns.email]
+name = "이메일"
+regex = '[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'
+
+[response]
+enabled = true
+action = "redact"
+max_body_bytes = 1048576
+stream_lookback_bytes = 256
+"#);
+        let rc = load_response_config(config.path().to_str().unwrap()).unwrap().unwrap();
+        assert_eq!(rc.stream_lookback_bytes, 256);
+    }
+
+    #[test]
+    fn test_load_response_config_stream_enabled_defaults_true() {
+        let config = write_temp_config(r#"
+[patterns]
+[patterns.email]
+name = "이메일"
+regex = '[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'
+
+[response]
+enabled = true
+action = "redact"
+max_body_bytes = 1048576
+"#);
+        let rc = load_response_config(config.path().to_str().unwrap()).unwrap();
+        assert!(rc.is_some());
+        assert!(rc.unwrap().stream_enabled, "stream_enabled should default to true for backward compat");
+    }
+
+    #[test]
+    fn test_load_response_config_stream_enabled_false() {
+        let config = write_temp_config(r#"
+[patterns]
+[patterns.email]
+name = "이메일"
+regex = '[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'
+
+[response]
+enabled = true
+action = "redact"
+max_body_bytes = 1048576
+stream_enabled = false
+"#);
+        let rc = load_response_config(config.path().to_str().unwrap()).unwrap();
+        assert!(rc.is_some());
+        let rc = rc.unwrap();
+        assert!(!rc.stream_enabled);
     }
 
     #[test]
