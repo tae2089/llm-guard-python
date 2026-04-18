@@ -177,6 +177,57 @@ max_body_bytes = 1048576
         os.unlink(cfg)
 
 
+def test_response_warn_action_leaves_body_intact():
+    """action=warn → body 그대로 통과, stderr에 경고 출력."""
+    cfg = _write_config("""
+[response]
+enabled = true
+action = "warn"
+max_body_bytes = 1048576
+""")
+    srv, port = _start_server(b'{"email": "warned@example.com"}')
+    try:
+        r = _run(f"""
+            import urllib3
+            http = urllib3.PoolManager()
+            resp = http.request("GET", "http://127.0.0.1:{port}/")
+            print("BODY:" + resp.data.decode("utf-8"))
+        """, cfg)
+        assert r.returncode == 0, r.stderr
+        assert "warned@example.com" in r.stdout, "warn 모드는 body 변경 없어야"
+        assert "[REDACTED" not in r.stdout
+        assert "경고" in r.stderr or "warn" in r.stderr.lower(), \
+            f"warn 시 stderr 경고 출력 필요: {{r.stderr!r}}"
+    finally:
+        srv.shutdown()
+        os.unlink(cfg)
+
+
+def test_response_max_body_bytes_exceeded_skips_scan():
+    """max_body_bytes 초과 응답은 스캔 없이 그대로 통과."""
+    cfg = _write_config("""
+[response]
+enabled = true
+action = "redact"
+max_body_bytes = 10
+""")
+    # 10바이트를 초과하는 응답
+    srv, port = _start_server(b'{"email": "big@example.com", "data": "padding padding"}')
+    try:
+        r = _run(f"""
+            import urllib3
+            http = urllib3.PoolManager()
+            resp = http.request("GET", "http://127.0.0.1:{port}/")
+            print("BODY:" + resp.data.decode("utf-8"))
+        """, cfg)
+        assert r.returncode == 0, r.stderr
+        assert "big@example.com" in r.stdout, "max_body_bytes 초과 시 원본 그대로여야"
+        assert "[REDACTED" not in r.stdout
+    finally:
+        srv.shutdown()
+        os.unlink(cfg)
+
+
 def _start_chunked_server(chunks: list[bytes], content_type: str = "text/plain"):
     """Transfer-Encoding: chunked로 여러 청크를 전송하는 서버."""
     class Handler(http.server.BaseHTTPRequestHandler):

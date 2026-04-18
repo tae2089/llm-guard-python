@@ -1,16 +1,20 @@
 """Streaming response PII scanner (Phase 2)."""
 import sys
 from llm_guard._guard import mask as _mask
+from llm_guard._guard import log_block as _log_block
 
 
 class StreamingScanner:
     """청크 경계 PII를 잡기 위한 lookback window 스캐너."""
 
-    def __init__(self, action: str = "redact", lookback_bytes: int = 256):
+    def __init__(self, action: str = "redact", lookback_bytes: int = 256,
+                 method: str = "GET", url: str = ""):
         self._buf = bytearray()
         self._lookback = lookback_bytes
         self._action = action
         self._block_warned = False
+        self._method = method
+        self._url = url
         self.match_count = 0
 
     def feed(self, chunk: bytes) -> bytes:
@@ -32,9 +36,14 @@ class StreamingScanner:
     def flush(self) -> bytes:
         remaining = bytes(self._buf)
         self._buf = bytearray()
-        if not remaining:
-            return b""
-        return self._process(remaining)
+        result = self._process(remaining) if remaining else b""
+        if self.match_count > 0:
+            print(
+                f"[LLM_GUARD] 스트리밍 응답 스캔 완료: {self._method} {self._url}"
+                f" - 총 {self.match_count}개 PII 감지",
+                file=sys.stderr,
+            )
+        return result
 
     def _process(self, data: bytes) -> bytes:
         try:
@@ -46,7 +55,14 @@ class StreamingScanner:
         self.match_count += len(matches)
         if not matches:
             return data
+        for m in matches:
+            _log_block(self._method, self._url, f"response:{m.pattern_name}", m.matched_value)
         if self._action == "warn":
+            print(
+                f"[LLM_GUARD] 응답 경고(스트림): {self._method} {self._url}"
+                f" - {len(matches)}개 PII 감지",
+                file=sys.stderr,
+            )
             return data
         if self._action == "block" and not self._block_warned:
             print(

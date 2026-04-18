@@ -67,9 +67,9 @@
 - [x] e2e: 바이너리 응답 (Content-Type=image/png) → 수정 없이 통과
 - [x] e2e: [response] 섹션 없음 → 응답 PII 그대로 통과 (비활성)
 - [x] e2e: 응답 스캔 활성 시에도 요청 PII 차단 유지 (회귀)
-- [ ] hook: action=warn → 로그만, body 그대로 (Phase 2)
-- [ ] hook: max_body_bytes 초과 시 skip (Phase 2)
-- [ ] hook: preload_content=False(streaming) (Phase 2)
+- [x] hook: action=warn → 로그만, body 그대로 (Phase 2)
+- [x] hook: max_body_bytes 초과 시 skip (Phase 2)
+- [x] hook: preload_content=False(streaming) (Phase 2)
 
 ## Streaming Response Scan (Phase 2)
 ### Rust 단위 테스트

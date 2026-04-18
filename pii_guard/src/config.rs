@@ -93,7 +93,15 @@ pub fn load_response_config(path: &str) -> Result<Option<ResponseConfig>, String
 
     match config.response {
         Some(ref rc) if !rc.enabled => Ok(None),
-        Some(rc) => Ok(Some(rc)),
+        Some(rc) => {
+            if rc.stream_lookback_bytes < 64 {
+                return Err(format!(
+                    "stream_lookback_bytes({})는 최소 64 이상이어야 합니다",
+                    rc.stream_lookback_bytes
+                ));
+            }
+            Ok(Some(rc))
+        }
         None => Ok(None),
     }
 }
@@ -340,6 +348,25 @@ stream_enabled = false
         assert!(rc.is_some());
         let rc = rc.unwrap();
         assert!(!rc.stream_enabled);
+    }
+
+    #[test]
+    fn test_load_response_config_stream_lookback_too_small_is_error() {
+        let config = write_temp_config(r#"
+[patterns]
+[patterns.email]
+name = "이메일"
+regex = '[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'
+
+[response]
+enabled = true
+action = "redact"
+max_body_bytes = 1048576
+stream_lookback_bytes = 32
+"#);
+        let result = load_response_config(config.path().to_str().unwrap());
+        assert!(result.is_err(), "stream_lookback_bytes < 64이면 에러여야 함");
+        assert!(result.unwrap_err().contains("64"), "에러 메시지에 최소값 포함");
     }
 
     #[test]

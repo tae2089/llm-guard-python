@@ -81,9 +81,10 @@ def test_utf8_boundary_does_not_break_korean():
     assert (out + tail).decode("utf-8") == "안녕하세요 반갑습니다 테스트중입니다"
 
 
-def test_warn_action_passes_through_raw_bytes():
-    """action=warn → 원본 그대로 방출, match_count는 증가."""
-    scanner = StreamingScanner(action="warn", lookback_bytes=8)
+def test_warn_action_passes_through_raw_bytes(capsys):
+    """action=warn → 원본 그대로 방출, match_count는 증가, stderr 경고 출력."""
+    scanner = StreamingScanner(action="warn", lookback_bytes=8,
+                                method="GET", url="http://test/")
     payload = b"email user@example.com and more padding padding padding"
     out = scanner.feed(payload)
     tail = scanner.flush()
@@ -91,6 +92,9 @@ def test_warn_action_passes_through_raw_bytes():
     assert b"user@example.com" in full, "warn 모드는 원본 보존해야"
     assert b"[REDACTED:" not in full
     assert scanner.match_count >= 1, "match_count가 기록되어야"
+    captured = capsys.readouterr()
+    assert "경고" in captured.err or "warn" in captured.err.lower(), \
+        f"warn 액션 시 stderr 경고가 출력되어야: {captured.err!r}"
 
 
 def test_block_action_downgrades_to_redact_with_warning(capsys):

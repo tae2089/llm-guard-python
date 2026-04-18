@@ -1,3 +1,5 @@
+# GAP-5: 이 파일은 python/llm_guard_hook.py와 기능적으로 동일해야 합니다.
+# 변경 시 두 파일을 반드시 함께 수정하세요.
 import sys
 import importlib
 import importlib.abc
@@ -112,13 +114,17 @@ def _attach_streaming_scanner(resp, method, url, response_config):
     scanner = StreamingScanner(
         action=response_config.get("action", "redact"),
         lookback_bytes=response_config.get("stream_lookback_bytes", 256),
+        method=method,
+        url=str(url),
     )
     original_read = resp.read
     original_read_chunked = getattr(resp, "read_chunked", None)
 
     def wrapped_read(amt=None, *args, **kwargs):
         # CRITICAL-1: 재귀 대신 while 루프 — 작은 청크 연속 시 스택 오버플로 방지
-        while True:
+        # GAP-6: 극소 청크 연속 시 무한 루프 방지 — lookback*2 반복 후 강제 flush
+        _max_iters = scanner._lookback * 2
+        for _ in range(_max_iters):
             chunk = original_read(amt, *args, **kwargs)
             if not chunk:
                 tail = scanner.flush()
@@ -126,6 +132,8 @@ def _attach_streaming_scanner(resp, method, url, response_config):
             processed = scanner.feed(chunk)
             if processed:
                 return processed
+        # 상한 초과: 버퍼에 쌓인 데이터 강제 방출
+        return scanner.flush() or b""
 
     resp.read = wrapped_read
 
