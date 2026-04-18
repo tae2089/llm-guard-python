@@ -560,6 +560,108 @@ stream_lookback_bytes = 64
         os.unlink(cfg)
 
 
+def test_read_chunked_direct_pii_masked():
+    """read_chunked() 직접 호출 경로에서도 PII가 마스킹되어야 (Phase 2.5)."""
+    cfg = _write_config("""
+[response]
+enabled = true
+action = "redact"
+max_body_bytes = 1048576
+""")
+    padding = b" padding" * 40
+    chunks = [
+        b"contact email is user@example.com and",
+        padding + b" end",
+    ]
+    srv, port = _start_chunked_server(chunks)
+    try:
+        r = _run(f"""
+            import urllib3
+            http = urllib3.PoolManager()
+            resp = http.request("GET", "http://127.0.0.1:{port}/",
+                                preload_content=False)
+            received = b""
+            for chunk in resp.read_chunked(64, decode_content=True):
+                received += chunk
+            resp.release_conn()
+            print("BODY:" + received.decode("utf-8"))
+        """, cfg)
+        assert r.returncode == 0, r.stderr
+        assert "user@example.com" not in r.stdout, f"read_chunked PII leaked: {r.stdout}"
+        assert "[REDACTED:" in r.stdout
+    finally:
+        srv.shutdown()
+        os.unlink(cfg)
+
+
+def test_read_chunked_cross_chunk_pii_masked():
+    """read_chunked() 서버 청크 경계 걸친 PII도 마스킹.
+
+    amt=4096으로 서버 청크를 분할 없이 수신해 lookback 윈도우로 검출.
+    """
+    cfg = _write_config("""
+[response]
+enabled = true
+action = "redact"
+max_body_bytes = 1048576
+""")
+    padding = b" padding" * 40
+    chunks = [
+        b"contact user@exa",
+        b"mple.com done" + padding,
+    ]
+    srv, port = _start_chunked_server(chunks)
+    try:
+        r = _run(f"""
+            import urllib3
+            http = urllib3.PoolManager()
+            resp = http.request("GET", "http://127.0.0.1:{port}/",
+                                preload_content=False)
+            received = b""
+            for chunk in resp.read_chunked(4096, decode_content=True):
+                received += chunk
+            resp.release_conn()
+            print("BODY:" + received.decode("utf-8"))
+        """, cfg)
+        assert r.returncode == 0, r.stderr
+        assert "user@example.com" not in r.stdout, f"PII leaked: {r.stdout}"
+        assert "[REDACTED:" in r.stdout
+    finally:
+        srv.shutdown()
+        os.unlink(cfg)
+
+
+def test_read_chunked_stream_disabled_skips_wrap():
+    """stream_enabled=false면 read_chunked 래핑 skip → PII 그대로."""
+    cfg = _write_config("""
+[response]
+enabled = true
+action = "redact"
+max_body_bytes = 1048576
+stream_enabled = false
+""")
+    chunks = [b"email user@example.com padding padding padding padding padding"]
+    srv, port = _start_chunked_server(chunks)
+    try:
+        r = _run(f"""
+            import urllib3
+            http = urllib3.PoolManager()
+            resp = http.request("GET", "http://127.0.0.1:{port}/",
+                                preload_content=False)
+            received = b""
+            for chunk in resp.read_chunked(64, decode_content=True):
+                received += chunk
+            resp.release_conn()
+            print("BODY:" + received.decode("utf-8"))
+        """, cfg)
+        assert r.returncode == 0, r.stderr
+        assert "user@example.com" in r.stdout, "stream_enabled=false면 PII 그대로여야"
+        assert "[REDACTED" not in r.stdout
+    finally:
+        srv.shutdown()
+        os.unlink(cfg)
+
+
 def test_request_pii_still_blocked_regression():
     """응답 스캔 추가 후에도 요청 PII 차단은 유지"""
     cfg = _write_config("""

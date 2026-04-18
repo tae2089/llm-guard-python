@@ -24,9 +24,9 @@ def run_with_sitecustomize(code, env_extra=None):
 def test_sitecustomize_activates():
     r = run_with_sitecustomize("""
         import sitecustomize
-        import sys
-        from llm_guard_hook import LlmGuardFinder
-        assert any(isinstance(f, LlmGuardFinder) for f in sys.meta_path)
+        import urllib3.connectionpool as cp
+        assert getattr(cp.HTTPConnectionPool.urlopen, "__llm_guard_wrapped__", False), \
+            "urlopen이 래핑되지 않음"
     """)
     assert r.returncode == 0, r.stderr
     assert "[LLM_GUARD] 활성화됨" in r.stderr

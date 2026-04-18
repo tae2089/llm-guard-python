@@ -139,3 +139,20 @@
 - [x] api: 기본값 노출 (lookback / 4096)
 - [x] api: split_strategy="word" → RuntimeError
 - [x] api: max_sentence_bytes=256 → RuntimeError
+
+## Phase 2.5 — read_chunked 직접 호출 테스트
+- [x] e2e: read_chunked() 직접 호출 → PII 마스킹
+- [x] e2e: read_chunked() + 청크 경계 PII → 마스킹
+- [x] e2e: read_chunked() stream_enabled=false → 래핑 skip
+
+## GAP-1 / Phase 3 — httpx hook
+### httpx 동기 클라이언트
+- [x] hook: httpx.Client GET 요청 body PII → PiiBlockedError
+- [x] hook: httpx.Client 응답 body PII → 마스킹 (non-streaming)
+- [x] hook: httpx.Client streaming iter_bytes → 마스킹
+- [x] hook: httpx.Client streaming 청크 경계 PII → 마스킹
+- [x] hook: 바이너리 응답 (image/png) → 래핑 skip
+- [x] hook: response_config 없음 → 응답 PII 그대로
+### httpx 비동기 클라이언트
+- [x] hook: httpx.AsyncClient GET 요청 PII → PiiBlockedError
+- [x] hook: httpx.AsyncClient 응답 streaming → 마스킹
