@@ -52,8 +52,9 @@ def _is_text(content_type: str) -> bool:
 # ─── 요청 body 스캔 ──────────────────────────────────────────────────────────
 
 def _scan_request(request) -> None:
-    """요청 헤더·body에 PII가 있으면 PiiBlockedError 발생."""
-    from llm_guard._guard import scan
+    """요청 헤더·body에 PII/Semantic이 있으면 PiiBlockedError/InjectionBlockedError 발생."""
+    from llm_guard._guard import scan, analyze
+    from llm_guard._hook import PiiBlockedError, InjectionBlockedError
     method = request.method
     url = str(request.url)
 
@@ -79,9 +80,24 @@ def _scan_request(request) -> None:
         text = body.decode("utf-8", errors="ignore")
     except Exception:
         return
+
+    # Layer 1: PII 정규식
     result = scan(text)
     if result:
         _block_pii(method, url, result)
+
+    # Layer 2: 의미론적 분석 (urllib3 훅과 동일 의미론)
+    try:
+        semantic = analyze(text)
+        if semantic:
+            if semantic.category == "injection":
+                _block_semantic(method, url, semantic)
+            elif semantic.category == "jailbreak":
+                _warn_semantic(method, url, semantic)
+    except (PiiBlockedError, InjectionBlockedError):
+        raise
+    except Exception as e:
+        print(f"[LLM_GUARD] Layer 2 분석 오류: {e}", file=sys.stderr)
 
 
 # ─── 응답 스캔 (non-streaming) ───────────────────────────────────────────────
@@ -283,3 +299,19 @@ def _block_pii(method: str, url: str, scan_result) -> None:
     raise PiiBlockedError(
         f"[LLM_GUARD] 차단: {method} {url} - {scan_result.pattern_name} 발견"
     )
+
+
+def _block_semantic(method: str, url: str, result) -> None:
+    from llm_guard._guard import log_block
+    from llm_guard._hook import InjectionBlockedError
+    log_block(method, url, result.category, result.matched_text)
+    raise InjectionBlockedError(
+        f"[LLM_GUARD] 차단: {method} {url} - {result.category} 감지 (score={result.score:.2f})"
+    )
+
+
+def _warn_semantic(method: str, url: str, result) -> None:
+    from llm_guard._guard import log_block
+    msg = f"[LLM_GUARD] 경고: {method} {url} - {result.category} 감지 (score={result.score:.2f})"
+    log_block(method, url, result.category, result.matched_text)
+    print(msg, file=sys.stderr)
