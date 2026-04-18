@@ -40,8 +40,15 @@ jobs:
           path: pii_guard/dist
 
   macos:
-    name: Build macOS (aarch64)
-    runs-on: macos-latest
+    name: Build macOS (${{ matrix.target }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      matrix:
+        include:
+          - target: aarch64
+            runner: macos-latest
+          - target: x86_64
+            runner: macos-13
     steps:
       - uses: actions/checkout@v4
 
@@ -52,14 +59,14 @@ jobs:
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:
-          target: aarch64
+          target: ${{ matrix.target }}
           args: --release --out dist
           working-directory: pii_guard
 
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
-          name: wheels-macos-aarch64
+          name: wheels-macos-${{ matrix.target }}
           path: pii_guard/dist
 
   windows:
