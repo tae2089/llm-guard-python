@@ -454,6 +454,112 @@ max_body_bytes = 1048576
         os.unlink(cfg)
 
 
+def test_streaming_sentence_mode_masks_pii():
+    """sentence 모드 스트리밍에서도 PII가 마스킹되어야."""
+    cfg = _write_config("""
+[response]
+enabled = true
+action = "redact"
+max_body_bytes = 1048576
+split_strategy = "sentence"
+max_sentence_bytes = 4096
+""")
+    padding = b" padding" * 40
+    chunks = [
+        b"Hello, the contact email is user@example.com. ",
+        padding + b" end.",
+    ]
+    srv, port = _start_chunked_server(chunks)
+    try:
+        r = _run(f"""
+            import urllib3
+            http = urllib3.PoolManager()
+            resp = http.request("GET", "http://127.0.0.1:{port}/",
+                                preload_content=False)
+            received = b""
+            for chunk in resp.stream(64):
+                received += chunk
+            resp.release_conn()
+            print("BODY:" + received.decode("utf-8"))
+        """, cfg)
+        assert r.returncode == 0, r.stderr
+        assert "user@example.com" not in r.stdout, f"PII leaked in sentence mode: {r.stdout}"
+        assert "[REDACTED:" in r.stdout
+    finally:
+        srv.shutdown()
+        os.unlink(cfg)
+
+
+def test_streaming_sentence_mode_pii_across_chunk_boundary():
+    """sentence 모드에서 청크 경계 걸친 PII도 탐지해야."""
+    cfg = _write_config("""
+[response]
+enabled = true
+action = "redact"
+max_body_bytes = 1048576
+split_strategy = "sentence"
+max_sentence_bytes = 4096
+""")
+    padding = b" padding" * 40
+    chunks = [
+        b"Contact user@exa",
+        b"mple.com for help. " + padding,
+    ]
+    srv, port = _start_chunked_server(chunks)
+    try:
+        r = _run(f"""
+            import urllib3
+            http = urllib3.PoolManager()
+            resp = http.request("GET", "http://127.0.0.1:{port}/",
+                                preload_content=False)
+            received = b""
+            for chunk in resp.stream(64):
+                received += chunk
+            resp.release_conn()
+            print("BODY:" + received.decode("utf-8"))
+        """, cfg)
+        assert r.returncode == 0, r.stderr
+        assert "user@example.com" not in r.stdout, f"PII leaked: {r.stdout}"
+        assert "[REDACTED:" in r.stdout
+    finally:
+        srv.shutdown()
+        os.unlink(cfg)
+
+
+def test_streaming_sentence_mode_lookback_fallback():
+    """sentence 모드: max_sentence_bytes 초과 시 lookback 폴백으로 방출."""
+    cfg = _write_config("""
+[response]
+enabled = true
+action = "redact"
+max_body_bytes = 1048576
+split_strategy = "sentence"
+max_sentence_bytes = 512
+stream_lookback_bytes = 64
+""")
+    # 종결 신호 없이 600바이트 한 번에 전송 → max_sentence_bytes 초과 → lookback 폴백
+    big_chunk = b"X" * 600
+    chunks = [big_chunk]
+    srv, port = _start_chunked_server(chunks)
+    try:
+        r = _run(f"""
+            import urllib3
+            http = urllib3.PoolManager()
+            resp = http.request("GET", "http://127.0.0.1:{port}/",
+                                preload_content=False)
+            received = b""
+            for chunk in resp.stream(1024):
+                received += chunk
+            resp.release_conn()
+            print("LEN:" + str(len(received)))
+        """, cfg)
+        assert r.returncode == 0, r.stderr
+        assert "LEN:600" in r.stdout, f"전체 바이트가 수신되어야: {r.stdout}"
+    finally:
+        srv.shutdown()
+        os.unlink(cfg)
+
+
 def test_request_pii_still_blocked_regression():
     """응답 스캔 추가 후에도 요청 PII 차단은 유지"""
     cfg = _write_config("""

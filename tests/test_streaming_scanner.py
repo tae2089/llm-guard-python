@@ -12,7 +12,7 @@ try:
 except RuntimeError:
     pass  # 이미 다른 테스트에서 로드됨
 
-from llm_guard._streaming import StreamingScanner
+from llm_guard._streaming import StreamingScanner, _find_sentence_boundary
 
 
 def test_short_chunk_below_lookback_returns_empty():
@@ -114,8 +114,6 @@ def test_block_action_downgrades_to_redact_with_warning(capsys):
 def test_pii_split_across_chunks_is_detected():
     """청크 경계에 걸친 PII도 lookback 윈도우로 잡아야 함."""
     scanner = StreamingScanner(action="redact", lookback_bytes=32)
-    # 청크1: 'user@exa' 뒤에 충분한 padding → 이메일 완성 전 일부만 보임
-    # 청크2: 'mple.com' 으로 이메일 완성
     part1 = b"please contact user@exa"
     part2 = b"mple.com immediately for details padding padding padding padding"
     out1 = scanner.feed(part1)
@@ -124,3 +122,177 @@ def test_pii_split_across_chunks_is_detected():
     full = out1 + out2 + tail
     assert b"user@example.com" not in full, f"PII leaked: {full!r}"
     assert b"[REDACTED:" in full, f"no redaction in {full!r}"
+
+
+# ── _find_sentence_boundary 직접 테스트 (T6-T16) ──────────────────────────────
+
+def test_fsb_double_newline():
+    """\\n\\n → 그 직후 위치 반환."""
+    buf = b"hello world\n\nmore text"
+    pos = _find_sentence_boundary(buf)
+    assert pos == 13, f"expected 13, got {pos}"  # len("hello world\n\n")
+
+
+def test_fsb_period_space():
+    """'. ' → 그 직후 위치 반환."""
+    buf = b"End of sentence. Next sentence starts here"
+    pos = _find_sentence_boundary(buf)
+    assert pos == 17, f"expected 17, got {pos}"  # len("End of sentence. ")
+
+
+def test_fsb_cjk_period():
+    """'。' (U+3002, 3바이트) → 그 직후 위치 반환."""
+    buf = "문장 끝입니다。다음 문장".encode("utf-8")
+    cjk_period = "。".encode("utf-8")
+    prefix = "문장 끝입니다".encode("utf-8")
+    expected = len(prefix) + len(cjk_period)
+    pos = _find_sentence_boundary(buf)
+    assert pos == expected, f"expected {expected}, got {pos}"
+
+
+def test_fsb_empty_buffer():
+    """빈 버퍼 → -1."""
+    assert _find_sentence_boundary(b"") == -1
+
+
+def test_fsb_no_terminator():
+    """종결 신호 없으면 -1."""
+    buf = b"no sentence boundary here at all"
+    assert _find_sentence_boundary(buf) == -1
+
+
+def test_fsb_standalone_period_no_space():
+    """단독 '.' (뒤에 공백/개행 없음) → -1 (URL/소수점 false positive 방지)."""
+    buf = b"http://example.com/path.html"
+    assert _find_sentence_boundary(buf) == -1
+
+
+def test_fsb_question_newline():
+    """'?\\n' → 그 직후 위치 반환."""
+    buf = b"Is this right?\nYes it is."
+    pos = _find_sentence_boundary(buf)
+    # '?' 위치 13, '\n' 위치 14, 직후는 15
+    assert pos == 15, f"expected 15, got {pos}"
+
+
+def test_fsb_exclaim_space():
+    """'! ' → 그 직후 위치 반환."""
+    buf = b"Watch out! Something happened."
+    pos = _find_sentence_boundary(buf)
+    assert pos == 11, f"expected 11, got {pos}"  # len("Watch out! ")
+
+
+def test_fsb_multiple_terminators_returns_last():
+    """여러 종결 신호 → 마지막 것의 직후 위치 반환."""
+    buf = b"First sentence. Second sentence. Third"
+    pos = _find_sentence_boundary(buf)
+    assert pos == 33, f"expected 33, got {pos}"  # len("First sentence. Second sentence. ")
+
+
+def test_fsb_cjk_question_mark():
+    """'？' (U+FF1F) → 그 직후 위치 반환."""
+    buf = "정말인가？다음 내용".encode("utf-8")
+    cjk_q = "？".encode("utf-8")
+    prefix = "정말인가".encode("utf-8")
+    expected = len(prefix) + len(cjk_q)
+    pos = _find_sentence_boundary(buf)
+    assert pos == expected, f"expected {expected}, got {pos}"
+
+
+def test_fsb_period_at_end_no_space():
+    """버퍼 끝이 '.'으로 끝나고 뒤에 아무것도 없으면 → -1."""
+    buf = b"This is the end."
+    assert _find_sentence_boundary(buf) == -1
+
+
+# ── sentence 모드 feed/flush 동작 테스트 (T17-T25) ────────────────────────────
+
+def test_sentence_mode_splits_at_double_newline():
+    """sentence 모드: \\n\\n 경계에서 방출."""
+    scanner = StreamingScanner(action="redact", lookback_bytes=32,
+                                split_strategy="sentence", max_sentence_bytes=512)
+    data = b"First paragraph.\n\nSecond paragraph starts here padding padding"
+    out = scanner.feed(data)
+    # \n\n 이후까지 방출되어야 함
+    assert b"\n\n" in out or out.endswith(b"\n\n") or b"First paragraph" in out, \
+        f"sentence boundary not respected: {out!r}"
+    assert len(out) > 0, "sentence 경계에서 방출이 없음"
+
+
+def test_sentence_mode_holds_without_boundary():
+    """sentence 모드: 종결 신호 없으면 전부 hold."""
+    scanner = StreamingScanner(action="redact", lookback_bytes=32,
+                                split_strategy="sentence", max_sentence_bytes=512)
+    data = b"no sentence boundary here at all"
+    out = scanner.feed(data)
+    assert out == b"", f"종결 신호 없으면 hold해야: {out!r}"
+
+
+def test_sentence_mode_splits_at_period_space():
+    """sentence 모드: '. ' 경계에서 방출."""
+    scanner = StreamingScanner(action="redact", lookback_bytes=32,
+                                split_strategy="sentence", max_sentence_bytes=512)
+    data = b"This is a sentence. And this is another one that keeps going on"
+    out = scanner.feed(data)
+    assert b"This is a sentence." in out, f"'. ' 경계까지 방출되어야: {out!r}"
+
+
+def test_sentence_mode_fallback_on_max_exceeded():
+    """sentence 모드: max_sentence_bytes 초과 시 lookback 폴백."""
+    scanner = StreamingScanner(action="redact", lookback_bytes=32,
+                                split_strategy="sentence", max_sentence_bytes=512)
+    # 종결 신호 없이 600바이트 → max 초과 → lookback 폴백으로 방출
+    data = b"X" * 600
+    out = scanner.feed(data)
+    assert len(out) > 0, "max_sentence_bytes 초과 시 강제 방출되어야"
+    assert len(out) == 600 - 32, f"lookback 폴백: 600-32=568 예상, got {len(out)}"
+
+
+def test_sentence_mode_pii_across_chunks():
+    """sentence 모드에서도 청크 경계 PII가 마스킹되어야."""
+    scanner = StreamingScanner(action="redact", lookback_bytes=32,
+                                split_strategy="sentence", max_sentence_bytes=512)
+    part1 = b"contact user@exa"
+    part2 = b"mple.com for details. More text here padding padding padding"
+    out1 = scanner.feed(part1)
+    out2 = scanner.feed(part2)
+    tail = scanner.flush()
+    full = out1 + out2 + tail
+    assert b"user@example.com" not in full, f"PII leaked in sentence mode: {full!r}"
+    assert b"[REDACTED:" in full, f"no redaction in sentence mode: {full!r}"
+
+
+def test_sentence_mode_cjk_period():
+    """sentence 모드: 한글 마침표(。) 경계에서 방출."""
+    scanner = StreamingScanner(action="redact", lookback_bytes=32,
+                                split_strategy="sentence", max_sentence_bytes=512)
+    data = "첫 번째 문장입니다。두 번째 문장이 계속됩니다 패딩 패딩 패딩".encode("utf-8")
+    out = scanner.feed(data)
+    assert "。".encode("utf-8") in out or "첫 번째".encode("utf-8") in out, \
+        f"CJK 마침표 경계 방출 실패: {out!r}"
+
+
+def test_sentence_mode_flush_emits_all():
+    """sentence 모드: flush()는 남은 버퍼 전체 방출."""
+    scanner = StreamingScanner(action="redact", lookback_bytes=32,
+                                split_strategy="sentence", max_sentence_bytes=512)
+    data = b"incomplete sentence without boundary"
+    scanner.feed(data)
+    tail = scanner.flush()
+    assert tail == data, f"flush가 버퍼 전체 방출해야: {tail!r}"
+
+
+def test_max_iters_sentence_mode():
+    """`_max_iters_for_wrapped_read` sentence 모드에서 max_sentence_bytes*2."""
+    scanner = StreamingScanner(action="redact", lookback_bytes=32,
+                                split_strategy="sentence", max_sentence_bytes=1024)
+    assert scanner._max_iters_for_wrapped_read == 2048, \
+        f"expected 2048, got {scanner._max_iters_for_wrapped_read}"
+
+
+def test_max_iters_lookback_mode():
+    """`_max_iters_for_wrapped_read` lookback 모드에서 lookback*2."""
+    scanner = StreamingScanner(action="redact", lookback_bytes=256,
+                                split_strategy="lookback")
+    assert scanner._max_iters_for_wrapped_read == 512, \
+        f"expected 512, got {scanner._max_iters_for_wrapped_read}"

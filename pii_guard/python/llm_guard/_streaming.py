@@ -8,6 +8,7 @@ class StreamingScanner:
     """청크 경계 PII를 잡기 위한 lookback window 스캐너."""
 
     def __init__(self, action: str = "redact", lookback_bytes: int = 256,
+                 split_strategy: str = "lookback", max_sentence_bytes: int = 4096,
                  method: str = "GET", url: str = ""):
         self._buf = bytearray()
         self._lookback = lookback_bytes
@@ -15,23 +16,48 @@ class StreamingScanner:
         self._block_warned = False
         self._method = method
         self._url = url
+        self._split_strategy = split_strategy
+        self._max_sentence_bytes = max_sentence_bytes
         self.match_count = 0
+
+    @property
+    def _max_iters_for_wrapped_read(self) -> int:
+        if self._split_strategy == "sentence":
+            return self._max_sentence_bytes * 2
+        return self._lookback * 2
 
     def feed(self, chunk: bytes) -> bytes:
         """새 청크를 받아 방출 가능한 바이트를 리턴."""
         self._buf.extend(chunk)
+        if self._split_strategy == "sentence":
+            return self._feed_sentence()
+        return self._feed_lookback()
+
+    def _feed_lookback(self) -> bytes:
         if len(self._buf) <= self._lookback:
             return b""
-
-        split = len(self._buf) - self._lookback
-        split = _safe_utf8_split(self._buf, split)
+        split = _safe_utf8_split(self._buf, len(self._buf) - self._lookback)
         if split == 0:
             return b""
-
         scan_area = bytes(self._buf[:split])
-        held = self._buf[split:]
-        self._buf = bytearray(held)
+        self._buf = bytearray(self._buf[split:])
         return self._process(scan_area)
+
+    def _feed_sentence(self) -> bytes:
+        boundary = _find_sentence_boundary(bytes(self._buf))
+        if boundary > 0:
+            scan_area = bytes(self._buf[:boundary])
+            self._buf = bytearray(self._buf[boundary:])
+            return self._process(scan_area)
+        if len(self._buf) >= self._max_sentence_bytes:
+            # max 초과 시 lookback 폴백
+            split = _safe_utf8_split(self._buf, len(self._buf) - self._lookback)
+            if split == 0:
+                return b""
+            scan_area = bytes(self._buf[:split])
+            self._buf = bytearray(self._buf[split:])
+            return self._process(scan_area)
+        return b""
 
     def flush(self) -> bytes:
         remaining = bytes(self._buf)
@@ -71,6 +97,33 @@ class StreamingScanner:
             )
             self._block_warned = True
         return masked.encode("utf-8")
+
+
+_SENTENCE_TERMINATORS = [
+    b"\n\n",
+    b"\n",
+    b". ",
+    b".\n",
+    b"? ",
+    b"?\n",
+    b"! ",
+    b"!\n",
+    "。".encode("utf-8"),  # U+3002
+    "？".encode("utf-8"),  # U+FF1F
+    "！".encode("utf-8"),  # U+FF01
+]
+
+
+def _find_sentence_boundary(buf: bytes) -> int:
+    """버퍼 내 마지막 문장 종결 신호 직후 위치 반환. 없으면 -1."""
+    best = -1
+    for term in _SENTENCE_TERMINATORS:
+        idx = buf.rfind(term)
+        if idx != -1:
+            end = idx + len(term)
+            if end > best:
+                best = end
+    return best
 
 
 def _safe_utf8_split(buf: bytes, pos: int) -> int:

@@ -54,6 +54,14 @@ fn default_stream_lookback_bytes() -> usize {
     256
 }
 
+fn default_split_strategy() -> String {
+    "lookback".to_string()
+}
+
+fn default_max_sentence_bytes() -> usize {
+    4096
+}
+
 #[derive(Deserialize, Clone, Debug)]
 pub struct ResponseConfig {
     pub enabled: bool,
@@ -63,6 +71,10 @@ pub struct ResponseConfig {
     pub stream_enabled: bool,
     #[serde(default = "default_stream_lookback_bytes")]
     pub stream_lookback_bytes: usize,
+    #[serde(default = "default_split_strategy")]
+    pub split_strategy: String,
+    #[serde(default = "default_max_sentence_bytes")]
+    pub max_sentence_bytes: usize,
 }
 
 #[derive(Deserialize)]
@@ -98,6 +110,18 @@ pub fn load_response_config(path: &str) -> Result<Option<ResponseConfig>, String
                 return Err(format!(
                     "stream_lookback_bytes({})는 최소 64 이상이어야 합니다",
                     rc.stream_lookback_bytes
+                ));
+            }
+            if rc.split_strategy != "lookback" && rc.split_strategy != "sentence" {
+                return Err(format!(
+                    "split_strategy('{}')는 'lookback' 또는 'sentence'만 허용됩니다",
+                    rc.split_strategy
+                ));
+            }
+            if rc.max_sentence_bytes < 512 {
+                return Err(format!(
+                    "max_sentence_bytes({})는 최소 512 이상이어야 합니다",
+                    rc.max_sentence_bytes
                 ));
             }
             Ok(Some(rc))
@@ -367,6 +391,101 @@ stream_lookback_bytes = 32
         let result = load_response_config(config.path().to_str().unwrap());
         assert!(result.is_err(), "stream_lookback_bytes < 64이면 에러여야 함");
         assert!(result.unwrap_err().contains("64"), "에러 메시지에 최소값 포함");
+    }
+
+    #[test]
+    fn test_response_config_split_strategy_defaults_lookback() {
+        let config = write_temp_config(r#"
+[patterns]
+[patterns.email]
+name = "이메일"
+regex = '[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'
+
+[response]
+enabled = true
+action = "redact"
+max_body_bytes = 1048576
+"#);
+        let rc = load_response_config(config.path().to_str().unwrap())
+            .unwrap().unwrap();
+        assert_eq!(rc.split_strategy, "lookback");
+    }
+
+    #[test]
+    fn test_response_config_max_sentence_bytes_defaults_4096() {
+        let config = write_temp_config(r#"
+[patterns]
+[patterns.email]
+name = "이메일"
+regex = '[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'
+
+[response]
+enabled = true
+action = "redact"
+max_body_bytes = 1048576
+"#);
+        let rc = load_response_config(config.path().to_str().unwrap())
+            .unwrap().unwrap();
+        assert_eq!(rc.max_sentence_bytes, 4096);
+    }
+
+    #[test]
+    fn test_response_config_invalid_split_strategy_is_error() {
+        let config = write_temp_config(r#"
+[patterns]
+[patterns.email]
+name = "이메일"
+regex = '[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'
+
+[response]
+enabled = true
+action = "redact"
+max_body_bytes = 1048576
+split_strategy = "word"
+"#);
+        let result = load_response_config(config.path().to_str().unwrap());
+        assert!(result.is_err(), "split_strategy='word'는 에러여야 함");
+    }
+
+    #[test]
+    fn test_response_config_max_sentence_bytes_too_small_is_error() {
+        let config = write_temp_config(r#"
+[patterns]
+[patterns.email]
+name = "이메일"
+regex = '[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'
+
+[response]
+enabled = true
+action = "redact"
+max_body_bytes = 1048576
+split_strategy = "sentence"
+max_sentence_bytes = 256
+"#);
+        let result = load_response_config(config.path().to_str().unwrap());
+        assert!(result.is_err(), "max_sentence_bytes < 512이면 에러여야 함");
+        assert!(result.unwrap_err().contains("512"), "에러 메시지에 최소값 포함");
+    }
+
+    #[test]
+    fn test_response_config_sentence_mode_valid() {
+        let config = write_temp_config(r#"
+[patterns]
+[patterns.email]
+name = "이메일"
+regex = '[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'
+
+[response]
+enabled = true
+action = "redact"
+max_body_bytes = 1048576
+split_strategy = "sentence"
+max_sentence_bytes = 1024
+"#);
+        let rc = load_response_config(config.path().to_str().unwrap())
+            .unwrap().unwrap();
+        assert_eq!(rc.split_strategy, "sentence");
+        assert_eq!(rc.max_sentence_bytes, 1024);
     }
 
     #[test]

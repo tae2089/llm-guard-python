@@ -96,3 +96,46 @@
 - [x] e2e: 바이너리 스트림(image/png, preload=False) → 래핑 skip
 - [x] e2e: 비스트리밍 경로 회귀 (Phase 1 동작 불변)
 - [x] e2e: action=block + 스트림 → redact 다운그레이드
+
+## Sentence Boundary Buffering (Phase 2 확장)
+### Rust 단위 테스트
+- [x] config: split_strategy 기본값 "lookback"
+- [x] config: max_sentence_bytes 기본값 4096
+- [x] config: split_strategy="word" → 에러
+- [x] config: max_sentence_bytes=256 → 에러
+- [x] config: split_strategy="sentence" + max_sentence_bytes=1024 → 정상
+
+### Python 단위 테스트 — _find_sentence_boundary
+- [x] fsb: \n\n → 직후 위치 반환
+- [x] fsb: '. ' → 직후 위치 반환
+- [x] fsb: '。' (U+3002) → 직후 위치 반환
+- [x] fsb: 빈 버퍼 → -1
+- [x] fsb: 종결 신호 없음 → -1
+- [x] fsb: 단독 '.' (URL) → -1
+- [x] fsb: '?\n' → 직후 위치 반환
+- [x] fsb: '! ' → 직후 위치 반환
+- [x] fsb: 여러 종결 신호 → 마지막 것
+- [x] fsb: '？' (U+FF1F) → 직후 위치 반환
+- [x] fsb: 버퍼 끝 '.' (뒤에 공백 없음) → -1
+
+### Python 단위 테스트 — sentence 모드 feed
+- [x] scanner: sentence 모드, \n\n 경계에서 방출
+- [x] scanner: sentence 모드, 종결 신호 없으면 hold
+- [x] scanner: sentence 모드, '. ' 경계에서 방출
+- [x] scanner: sentence 모드, max_sentence_bytes 초과 → lookback 폴백
+- [x] scanner: sentence 모드, 청크 경계 PII 탐지
+- [x] scanner: sentence 모드, 한글 마침표(。) 경계에서 방출
+- [x] scanner: sentence 모드, flush()는 남은 버퍼 전체 방출
+- [x] scanner: _max_iters_for_wrapped_read sentence 모드 → max_sentence_bytes*2
+- [x] scanner: _max_iters_for_wrapped_read lookback 모드 → lookback*2
+
+### Python e2e
+- [x] e2e: sentence 모드 스트리밍 PII 마스킹
+- [x] e2e: sentence 모드 청크 경계 PII 탐지
+- [x] e2e: sentence 모드 max_sentence_bytes 초과 → lookback 폴백
+
+### response_api 테스트
+- [x] api: split_strategy/max_sentence_bytes Python dict 노출
+- [x] api: 기본값 노출 (lookback / 4096)
+- [x] api: split_strategy="word" → RuntimeError
+- [x] api: max_sentence_bytes=256 → RuntimeError

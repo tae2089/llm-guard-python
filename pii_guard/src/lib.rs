@@ -95,6 +95,8 @@ fn get_response_config() -> PyResult<Option<PyObject>> {
             dict.set_item("max_body_bytes", rc.max_body_bytes)?;
             dict.set_item("stream_enabled", rc.stream_enabled)?;
             dict.set_item("stream_lookback_bytes", rc.stream_lookback_bytes)?;
+            dict.set_item("split_strategy", rc.split_strategy)?;
+            dict.set_item("max_sentence_bytes", rc.max_sentence_bytes)?;
             Ok(Some(dict.unbind().into()))
         }),
     }

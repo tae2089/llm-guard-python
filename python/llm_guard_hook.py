@@ -114,6 +114,8 @@ def _attach_streaming_scanner(resp, method, url, response_config):
     scanner = StreamingScanner(
         action=response_config.get("action", "redact"),
         lookback_bytes=response_config.get("stream_lookback_bytes", 256),
+        split_strategy=response_config.get("split_strategy", "lookback"),
+        max_sentence_bytes=response_config.get("max_sentence_bytes", 4096),
         method=method,
         url=str(url),
     )
@@ -122,8 +124,8 @@ def _attach_streaming_scanner(resp, method, url, response_config):
 
     def wrapped_read(amt=None, *args, **kwargs):
         # CRITICAL-1: 재귀 대신 while 루프 — 작은 청크 연속 시 스택 오버플로 방지
-        # GAP-6: 극소 청크 연속 시 무한 루프 방지 — lookback*2 반복 후 강제 flush
-        _max_iters = scanner._lookback * 2
+        # GAP-6: 극소 청크 연속 시 무한 루프 방지 — max_iters 반복 후 강제 flush
+        _max_iters = scanner._max_iters_for_wrapped_read
         for _ in range(_max_iters):
             chunk = original_read(amt, *args, **kwargs)
             if not chunk:
