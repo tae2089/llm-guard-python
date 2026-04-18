@@ -110,6 +110,26 @@ def _run(code: str, config_path: str, env_extra=None):
     )
 
 
+def _run_direct(code: str, env_extra=None):
+    """PYTHONPATH·LLM_GUARD_CONFIG 없이 실행 — install() 직접 호출 테스트용.
+    python/sitecustomize.py auto-bootstrap(기본 config 경로 포함)을 방지해
+    이중 load_config RuntimeError를 피한다."""
+    env = os.environ.copy()
+    env.pop("PYTHONPATH", None)          # sitecustomize.py 자동 실행 방지
+    env.pop("LLM_GUARD_DISABLE", None)
+    env.pop("LLM_GUARD_CONFIG", None)
+    env["LLM_GUARD_SEMANTIC"] = "0"
+    if env_extra:
+        env.update(env_extra)
+    return subprocess.run(
+        [VENV_PYTHON, "-c", textwrap.dedent(code)],
+        capture_output=True,
+        text=True,
+        timeout=15,
+        env=env,
+    )
+
+
 # ─── 동기 클라이언트 테스트 ───────────────────────────────────────────────────
 
 def test_httpx_client_request_body_pii_blocked():
@@ -405,3 +425,30 @@ except Exception as e:
         f"jailbreak은 통과되어야 함: stdout={result.stdout!r} stderr={result.stderr!r}"
     assert "jailbreak" in result.stderr.lower() or "경고" in result.stderr, \
         f"jailbreak 경고가 stderr에 출력되어야: {result.stderr!r}"
+
+
+# ─── P0-A 회귀 테스트: install() 단독으로 httpx 가드 ─────────────────────────
+
+def test_install_guards_httpx_without_explicit_activate():
+    """llm_guard.install() 단독 호출만으로 httpx 요청이 차단되어야 한다 (P0-A)."""
+    srv, port = _start_server(b"ok")
+    cfg = _write_config(None)
+    code = f"""
+import llm_guard
+llm_guard.install("{cfg}")
+import httpx
+try:
+    client = httpx.Client()
+    client.post("http://127.0.0.1:{port}/api",
+                content=b"test@example.com",
+                headers={{"Content-Type": "text/plain"}})
+    print("REQUEST_SENT")
+except Exception as e:
+    print(type(e).__name__)
+"""
+    result = _run_direct(code)
+    srv.shutdown()
+    assert "PiiBlockedError" in result.stdout, (
+        f"install() 후 httpx PII가 차단되어야 함: "
+        f"stdout={result.stdout!r} stderr={result.stderr!r}"
+    )

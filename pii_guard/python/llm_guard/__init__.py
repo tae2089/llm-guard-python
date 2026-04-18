@@ -68,6 +68,10 @@ def install(config_path=None):
     if not wrap_urllib3_if_available():
         sys.meta_path.insert(0, LlmGuardFinder())
 
+    # httpx 후킹 (OpenAI/Anthropic SDK v1+ 은 httpx 사용)
+    from llm_guard._httpx_hook import wrap_httpx_if_available
+    wrap_httpx_if_available()
+
     print("[LLM_GUARD] 활성화됨", file=sys.stderr)
 
     # Layer 2: 의미론적 분석 초기화
