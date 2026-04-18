@@ -55,6 +55,75 @@ export LLM_GUARD_DISABLE=1   # 전체 비활성화 (선택)
 | Layer 2 | 요청 | 임베딩 유사도 (fastembed) | 프롬프트 인젝션 → 차단, 탈옥 시도 → 경고 |
 | Layer 3 | 응답 | 정규식 PII 탐지 | LLM 응답의 PII 유출 → 마스킹 또는 차단 |
 
+## 아키텍처
+
+### 전체 구조
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                       Python 앱                              │
+│  openai / anthropic / httpx / requests / urllib3 직접 호출  │
+└────────────────┬──────────────────────┬─────────────────────┘
+                 │                      │
+        urllib3 hook               httpx hook
+   (_hook.py monkey-patch)   (_httpx_hook.py monkey-patch)
+                 │                      │
+                 └──────────┬───────────┘
+                            ▼
+              ┌─────────────────────────┐
+              │      Rust 코어 (PyO3)   │
+              │  ┌──────────────────┐   │
+              │  │ Layer 1: 정규식  │   │  ← 요청 body/header PII 탐지
+              │  │  detector.rs     │   │
+              │  ├──────────────────┤   │
+              │  │ Layer 2: 임베딩  │   │  ← 프롬프트 인젝션/탈옥 탐지
+              │  │  semantic.rs     │   │    (FastEmbed bge-m3 + DuckDB vss)
+              │  │  vectordb.rs     │   │
+              │  └──────────────────┘   │
+              └─────────────────────────┘
+                            │
+                  차단 → PiiBlockedError
+                  경고 → stderr 로그
+                  통과 → 실제 HTTP 요청 전송
+                            │
+                            ▼
+                     LLM API 서버
+                            │
+                     응답 수신
+                            ▼
+              ┌─────────────────────────┐
+              │  Layer 3: 응답 PII 스캔 │
+              │  StreamingScanner       │  ← streaming 청크 경계 PII 탐지
+              │  (_streaming.py)        │    lookback / sentence 경계 모드
+              └─────────────────────────┘
+                            │
+                  redact → [REDACTED:패턴명] 치환
+                  block  → PiiBlockedError
+                  warn   → 원본 반환 + 로그
+```
+
+### 핵심 모듈
+
+| 모듈 | 위치 | 역할 |
+|------|------|------|
+| `_guard.abi3.so` | `llm_guard/` | Rust/PyO3 확장 — scan, mask, analyze |
+| `_hook.py` | `llm_guard/` | urllib3 `HTTPConnectionPool.urlopen` monkey-patch |
+| `_httpx_hook.py` | `llm_guard/` | httpx `Client.send` / `AsyncClient.send` monkey-patch |
+| `_streaming.py` | `llm_guard/` | `StreamingScanner` — 청크 스트림 PII redaction |
+| `__init__.py` | `llm_guard/` | `install()` 공개 API — urllib3 + httpx 동시 활성화 |
+| `_boot/sitecustomize.py` | `llm_guard/` | Python 시작 시 자동 부트스트랩 (zero-config 배포) |
+
+### HTTP 라이브러리 커버리지
+
+| 라이브러리 | 후킹 경로 | 커버 여부 |
+|-----------|-----------|-----------|
+| `openai` SDK v1+ | httpx → `_httpx_hook` | ✅ |
+| `anthropic` SDK v0.20+ | httpx → `_httpx_hook` | ✅ |
+| `requests` | urllib3 → `_hook` | ✅ |
+| `httpx` 직접 사용 | `_httpx_hook` | ✅ |
+| `urllib3` 직접 사용 | `_hook` | ✅ |
+| `aiohttp` | 미지원 | ❌ |
+
 ## 설정 파일 (pii_patterns.toml)
 
 ```toml
