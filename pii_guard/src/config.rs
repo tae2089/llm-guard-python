@@ -118,9 +118,9 @@ pub fn load_response_config(path: &str) -> Result<Option<ResponseConfig>, String
                     rc.split_strategy
                 ));
             }
-            if rc.max_sentence_bytes < 512 {
+            if rc.max_sentence_bytes < 512 || rc.max_sentence_bytes > 65536 {
                 return Err(format!(
-                    "max_sentence_bytes({})는 최소 512 이상이어야 합니다",
+                    "max_sentence_bytes({})는 512~65536 범위여야 합니다",
                     rc.max_sentence_bytes
                 ));
             }

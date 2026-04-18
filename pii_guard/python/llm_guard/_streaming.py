@@ -115,7 +115,14 @@ _SENTENCE_TERMINATORS = [
 
 
 def _find_sentence_boundary(buf: bytes) -> int:
-    """버퍼 내 마지막 문장 종결 신호 직후 위치 반환. 없으면 -1."""
+    """버퍼 내 마지막 문장 종결 신호 직후 위치 반환. 없으면 -1.
+
+    설계 결정:
+    - rfind(마지막 경계) 사용: 버퍼 내 여러 문장을 한 번에 방출해 처리 효율을 높임.
+    - CJK 종결 부호(。？！)는 뒤에 공백/개행 없이도 문장 끝으로 인정
+      (CJK 텍스트는 공백 없이 연속됨).
+    - 단독 ASCII ./?/! (공백/개행 미동반)는 URL/소수점/이메일 false positive 방지용 제외.
+    """
     best = -1
     for term in _SENTENCE_TERMINATORS:
         idx = buf.rfind(term)

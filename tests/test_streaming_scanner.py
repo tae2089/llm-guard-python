@@ -205,6 +205,14 @@ def test_fsb_period_at_end_no_space():
     assert _find_sentence_boundary(buf) == -1
 
 
+def test_fsb_period_newline():
+    """.\\n → 그 직후 위치 반환 (스펙 수용 기준 #2)."""
+    buf = b"End of sentence.\nNext line"
+    pos = _find_sentence_boundary(buf)
+    # '.' 위치 15, '\n' 위치 16, 직후는 17
+    assert pos == 17, f"expected 17, got {pos}"
+
+
 # ── sentence 모드 feed/flush 동작 테스트 (T17-T25) ────────────────────────────
 
 def test_sentence_mode_splits_at_double_newline():
