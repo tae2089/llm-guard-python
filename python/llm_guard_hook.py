@@ -1,3 +1,4 @@
+# @index urllib3 HTTP 요청/응답을 가로채 PII·injection을 탐지·차단하는 monkey-patch 훅.
 # GAP-5: 이 파일은 pii_guard/python/llm_guard/_hook.py와 기능적으로 동일해야 합니다.
 # 변경 시 두 파일을 반드시 함께 수정하세요.
 import sys
@@ -71,6 +72,9 @@ class LlmGuardFinder:
         return module
 
 
+# @intent urllib3가 이미 임포트된 경우 LlmGuardFinder 없이 즉시 urlopen을 패치
+# @domainRule 이미 훅이 적용된 경우 중복 패치하지 않는다
+# @sideEffect HTTPConnectionPool.urlopen 메서드를 인스턴스가 아닌 클래스 레벨에서 교체
 def wrap_urllib3_if_available():
     """urllib3가 이미 설치되어 있으면 즉시 래핑 (import hook 불필요)"""
     if LlmGuardFinder._hooked:
@@ -94,6 +98,11 @@ def _is_text_content_type(ct):
     return any(ct_lower.startswith(t) for t in _TEXT_CONTENT_TYPES)
 
 
+# @intent 스트리밍 HTTP 응답의 resp.read/read_chunked를 가로채 실시간 PII 마스킹을 적용
+# @domainRule Content-Type이 텍스트가 아닌 응답(image/*, octet-stream)은 래핑하지 않는다
+# @domainRule stream_enabled=false 설정 시 래핑을 완전히 건너뛴다
+# @sideEffect resp.read, resp.read_chunked 메서드를 인스턴스 레벨에서 교체
+# @mutates resp.__llm_guard_streaming__, resp.read, resp.read_chunked
 def _attach_streaming_scanner(resp, method, url, response_config):
     """preload_content=False 응답에 StreamingScanner를 붙여 resp.read를 래핑."""
     from llm_guard._streaming import StreamingScanner
@@ -152,6 +161,11 @@ def _attach_streaming_scanner(resp, method, url, response_config):
         resp.read_chunked = wrapped_read_chunked
 
 
+# @intent 버퍼된 HTTP 응답 body에서 PII를 스캔하고 action에 따라 처리
+# @domainRule action=block → PiiBlockedError 발생; action=redact → body 인플레이스 치환; action=warn → stderr 경고만
+# @domainRule max_body_bytes 초과 응답은 스캔하지 않는다
+# @sideEffect action=redact 시 resp._body를 마스킹된 바이트로 덮어씀
+# @mutates resp._body
 def _scan_response(resp, method, url, response_config):
     """응답 body를 스캔. action에 따라 마스킹/차단/경고."""
     import llm_guard
@@ -207,6 +221,11 @@ def _scan_response(resp, method, url, response_config):
     )
 
 
+# @intent urllib3 HTTP 요청의 헤더·body에 대해 Layer 1(PII) + Layer 2(semantic) 검사를 수행하고 응답도 스캔
+# @domainRule 요청 헤더에 PII 발견 시 즉시 PiiBlockedError — 서버로 전송되기 전에 차단
+# @domainRule injection 탐지 시 InjectionBlockedError; jailbreak 탐지 시 경고 후 요청 통과
+# @sideEffect HTTPConnectionPool.urlopen을 클래스 레벨 패치로 교체
+# @mutates connectionpool_module.HTTPConnectionPool.urlopen
 def _wrap_urlopen(connectionpool_module):
     """HTTPConnectionPool.urlopen을 래핑"""
     import llm_guard

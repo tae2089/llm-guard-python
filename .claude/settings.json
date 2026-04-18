@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "ccg": {
+      "type": "stdio",
+      "command": "ccg",
+      "args": ["serve", "--db-dsn", "/Users/imtaebin/.config/ccg/ccg.db", "--namespace", "python-hooking-demo"]
+    }
+  }
+}

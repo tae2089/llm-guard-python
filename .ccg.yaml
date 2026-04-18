@@ -1,0 +1,667 @@
+db:
+  dsn: /Users/imtaebin/.config/ccg/ccg.db
+
+namespace: python-hooking-demo
+
+exclude:
+  - target
+  - .venv
+  - "*.db"
+  - "*.db-wal"
+  - "*.db-shm"
+  - workspaces
+  - docs
+  - .claude
+  - .ccg
+  - .github
+  - k8s
+  - tests
+  - Dockerfile*
+  - .gitignore
+
+rules:
+  - pattern: "_bootstrap_llm_guard"
+    category: incomplete
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "_chain_load_sitecustomize"
+    category: incomplete
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "demo.py"
+    category: missing
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "pii_guard/python/llm_guard/__init__.py"
+    category: missing
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "pii_guard/python/llm_guard/_boot/sitecustomize.py"
+    category: missing
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "pii_guard/python/llm_guard/_cli.py"
+    category: missing
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "pii_guard/python/llm_guard/_streaming.py"
+    category: missing
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "pii_guard/src/config.rs"
+    category: missing
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "pii_guard/src/detector.rs"
+    category: missing
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "pii_guard/src/lib.rs"
+    category: missing
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "pii_guard/src/logger.rs"
+    category: missing
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "pii_guard/src/semantic.rs"
+    category: missing
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "pii_guard/src/vectordb.rs"
+    category: missing
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "python/llm_guard_hook.py"
+    category: missing
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "python/llm_guard_httpx_hook.py"
+    category: missing
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "python/sitecustomize.py"
+    category: missing
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "superpowers/plans/2026-04-15-pii-guard"
+    category: orphan
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "superpowers/plans/2026-04-16-semantic-layer"
+    category: orphan
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "superpowers/specs/2026-04-15-pii-guard-design"
+    category: orphan
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "superpowers/specs/2026-04-16-semantic-layer-design"
+    category: orphan
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "Config"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "FullConfig"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "Handler"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "InjectionBlockedError"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "LlmGuardFinder"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "Logger"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "Logger.log"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "Logger.new"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "PatternEntry"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "PiiBlockedError"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "PiiDetector"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "PiiDetector.mask"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "PiiDetector.new"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "PiiDetector.scan"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "PiiPattern"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "ResponseConfig"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "ScanMatch"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "ScanResult"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "SearchMatch"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "SeedConfig"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "SeedEntry"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "SemanticAnalyzer"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "SemanticAnalyzer.analyze"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "SemanticAnalyzer.embed"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "SemanticAnalyzer.new"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "SemanticAnalyzer.seed_vectors"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "SemanticAnalyzer.vector_count"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "SemanticConfig"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "SemanticMatchResult"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "SemanticResult"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "StreamingScanner"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "VectorDb"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "VectorDb.count"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "VectorDb.insert"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "VectorDb.open"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "VectorDb.search"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "_AsyncScanningByteStream"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "_ScanningByteStream"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "_WrappingLoader"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "__aiter__"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "__init__"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "__iter__"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "_attach_async_stream_scanner"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "_attach_stream_scanner"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "_attach_streaming_scanner"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "_block_pii"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "_block_semantic"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "_bootstrap"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "_feed_lookback"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "_feed_sentence"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "_find_sentence_boundary"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "_guard"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "_is_text"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "_is_text_content_type"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "_make_async_scanner_stream"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "_make_sync_scanner_stream"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "_max_iters_for_wrapped_read"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "_patch_async_client"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "_patch_sync_client"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "_process"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "_safe_utf8_split"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "_scan_buffered_response"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "_scan_request"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "_scan_response"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "_start_fake_llm_server"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "_warn_semantic"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "_wrap_urlopen"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "aclose"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "activate"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "analyze"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "close"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "create_analyzer"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "create_module"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "default_max_sentence_bytes"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "default_split_strategy"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "default_stream_enabled"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "default_stream_lookback_bytes"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "do_POST"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "embedding_literal"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "exec_module"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "fake_embedding"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "feed"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "find_module"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "find_spec"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "flush"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "get_response_config"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "get_semantic_config"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "init_semantic"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "install"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "load_config"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "load_module"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "load_response_config"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "load_seed_vectors"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "load_semantic_config"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "log_block"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "log_message"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "main"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "make_detector_with_pattern"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "mask"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "mask_value"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "result_name"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "scan"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "wrap_httpx_if_available"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "wrap_urllib3_if_available"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "wrapped_read"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "wrapped_read_chunked"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "wrapped_send"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "wrapped_urlopen"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"
+  - pattern: "write_temp_config"
+    category: unannotated
+    action: warn
+    auto: true
+    created: "2026-04-18"

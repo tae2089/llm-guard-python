@@ -1,3 +1,4 @@
+# @index httpx.Client/AsyncClient 요청·응답을 monkey-patch해 PII·injection을 탐지·차단하는 훅.
 """httpx hook — PII Guard for httpx.Client / httpx.AsyncClient (GAP-1)
 GAP-5: pii_guard/python/llm_guard/_httpx_hook.py와 기능적으로 동일해야 합니다.
 """
@@ -51,6 +52,9 @@ def _is_text(content_type: str) -> bool:
 
 # ─── 요청 body 스캔 ──────────────────────────────────────────────────────────
 
+# @intent httpx 요청 헤더와 body에서 PII(Layer 1)와 injection/jailbreak(Layer 2)를 검사해 서버 전송 전에 차단
+# @domainRule 헤더 값에 PII 발견 시 즉시 PiiBlockedError — body 검사보다 선행
+# @domainRule streaming body는 스캔 불가, 경고만 출력 후 통과
 def _scan_request(request) -> None:
     """요청 헤더·body에 PII/Semantic이 있으면 PiiBlockedError/InjectionBlockedError 발생."""
     from llm_guard._guard import scan, analyze
@@ -102,6 +106,9 @@ def _scan_request(request) -> None:
 
 # ─── 응답 스캔 (non-streaming) ───────────────────────────────────────────────
 
+# @intent httpx 버퍼드 응답 body의 PII를 스캔하고 action에 따라 차단·마스킹·경고 처리
+# @domainRule Content-Length가 max_body_bytes 초과 시 스캔을 건너뛴다
+# @mutates response._content, response.headers["content-length"]
 def _scan_buffered_response(response, method: str, url: str, response_config: dict) -> None:
     """response._content PII 스캔 / 마스킹."""
     from llm_guard._guard import mask, scan, log_block
@@ -244,6 +251,10 @@ def _attach_async_stream_scanner(httpx, response, method: str, url: str, respons
 
 # ─── Client 패치 ─────────────────────────────────────────────────────────────
 
+# @intent httpx.Client.send를 래핑해 모든 동기 HTTP 요청/응답에 PII 가드를 적용
+# @domainRule stream=True인 경우 응답에 StreamingScanner를 붙이고, 버퍼드 응답은 직접 스캔
+# @sideEffect httpx.Client.send 클래스 메서드를 전역 교체
+# @mutates httpx.Client.send
 def _patch_sync_client(httpx) -> None:
     original_send = httpx.Client.send
 
@@ -267,6 +278,9 @@ def _patch_sync_client(httpx) -> None:
     httpx.Client.send = wrapped_send
 
 
+# @intent httpx.AsyncClient.send를 래핑해 모든 비동기 HTTP 요청/응답에 PII 가드를 적용
+# @sideEffect httpx.AsyncClient.send 클래스 메서드를 전역 교체
+# @mutates httpx.AsyncClient.send
 def _patch_async_client(httpx) -> None:
     original_send = httpx.AsyncClient.send
 

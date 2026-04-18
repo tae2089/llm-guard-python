@@ -1,4 +1,5 @@
-# GAP-5: 이 파일은 python/llm_guard_hook.py와 기능적으로 동일해야 합니다.
+# @index urllib3 HTTP 요청/응답을 가로채 PII·injection을 탐지·차단하는 monkey-patch 훅.
+# GAP-5: 이 파일은 pii_guard/python/llm_guard/_hook.py와 기능적으로 동일해야 합니다.
 # 변경 시 두 파일을 반드시 함께 수정하세요.
 import sys
 import importlib
@@ -71,6 +72,9 @@ class LlmGuardFinder:
         return module
 
 
+# @intent urllib3가 이미 임포트된 경우 LlmGuardFinder 없이 즉시 urlopen을 패치
+# @domainRule 이미 훅이 적용된 경우 중복 패치하지 않는다
+# @sideEffect HTTPConnectionPool.urlopen 메서드를 인스턴스가 아닌 클래스 레벨에서 교체
 def wrap_urllib3_if_available():
     """urllib3가 이미 설치되어 있으면 즉시 래핑 (import hook 불필요)"""
     if LlmGuardFinder._hooked:
@@ -94,6 +98,11 @@ def _is_text_content_type(ct):
     return any(ct_lower.startswith(t) for t in _TEXT_CONTENT_TYPES)
 
 
+# @intent 스트리밍 HTTP 응답의 resp.read/read_chunked를 가로채 실시간 PII 마스킹을 적용
+# @domainRule Content-Type이 텍스트가 아닌 응답(image/*, octet-stream)은 래핑하지 않는다
+# @domainRule stream_enabled=false 설정 시 래핑을 완전히 건너뛴다
+# @sideEffect resp.read, resp.read_chunked 메서드를 인스턴스 레벨에서 교체
+# @mutates resp.__llm_guard_streaming__, resp.read, resp.read_chunked
 def _attach_streaming_scanner(resp, method, url, response_config):
     """preload_content=False 응답에 StreamingScanner를 붙여 resp.read를 래핑."""
     from llm_guard._streaming import StreamingScanner
@@ -152,9 +161,14 @@ def _attach_streaming_scanner(resp, method, url, response_config):
         resp.read_chunked = wrapped_read_chunked
 
 
+# @intent 버퍼된 HTTP 응답 body에서 PII를 스캔하고 action에 따라 처리
+# @domainRule action=block → PiiBlockedError 발생; action=redact → body 인플레이스 치환; action=warn → stderr 경고만
+# @domainRule max_body_bytes 초과 응답은 스캔하지 않는다
+# @sideEffect action=redact 시 resp._body를 마스킹된 바이트로 덮어씀
+# @mutates resp._body
 def _scan_response(resp, method, url, response_config):
     """응답 body를 스캔. action에 따라 마스킹/차단/경고."""
-    from llm_guard._guard import mask, scan, log_block
+    import llm_guard
 
     body = getattr(resp, "_body", None)
     if body is None:
@@ -178,20 +192,20 @@ def _scan_response(resp, method, url, response_config):
     action = response_config.get("action", "redact")
 
     if action == "block":
-        result = scan(text)
+        result = llm_guard.scan(text)
         if result:
-            log_block(method, str(url), f"response:{result.pattern_name}", result.matched_value)
+            llm_guard.log_block(method, str(url), f"response:{result.pattern_name}", result.matched_value)
             raise PiiBlockedError(
                 f"[LLM_GUARD] 응답 차단: {method} {url} - {result.pattern_name} 발견"
             )
         return
 
-    masked_text, matches = mask(text)
+    masked_text, matches = llm_guard.mask(text)
     if not matches:
         return
 
     for m in matches:
-        log_block(method, str(url), f"response:{m.pattern_name}", m.matched_value)
+        llm_guard.log_block(method, str(url), f"response:{m.pattern_name}", m.matched_value)
 
     if action == "warn":
         print(
@@ -207,21 +221,25 @@ def _scan_response(resp, method, url, response_config):
     )
 
 
+# @intent urllib3 HTTP 요청의 헤더·body에 대해 Layer 1(PII) + Layer 2(semantic) 검사를 수행하고 응답도 스캔
+# @domainRule 요청 헤더에 PII 발견 시 즉시 PiiBlockedError — 서버로 전송되기 전에 차단
+# @domainRule injection 탐지 시 InjectionBlockedError; jailbreak 탐지 시 경고 후 요청 통과
+# @sideEffect HTTPConnectionPool.urlopen을 클래스 레벨 패치로 교체
+# @mutates connectionpool_module.HTTPConnectionPool.urlopen
 def _wrap_urlopen(connectionpool_module):
     """HTTPConnectionPool.urlopen을 래핑"""
+    import llm_guard
     original = connectionpool_module.HTTPConnectionPool.urlopen
 
     def wrapped_urlopen(self, method, url, body=None, headers=None, **kwargs):
-        from llm_guard._guard import scan, analyze, get_response_config
-
         # HIGH-2: 매 요청마다 평가 — load_config 재호출 시에도 최신 설정 반영
-        response_config = get_response_config()
+        response_config = llm_guard.get_response_config()
 
         # --- Layer 1: PII 정규식 ---
         if headers:
             items = headers.items() if hasattr(headers, "items") else []
             for key, value in items:
-                result = scan(f"{key}: {value}")
+                result = llm_guard.scan(f"{key}: {value}")
                 if result:
                     _block_pii(method, url, result)
 
@@ -233,13 +251,13 @@ def _wrap_urlopen(connectionpool_module):
             else:
                 text = str(body)
 
-            result = scan(text)
+            result = llm_guard.scan(text)
             if result:
                 _block_pii(method, url, result)
 
             # --- Layer 2: 의미론적 분석 ---
             try:
-                semantic = analyze(text)
+                semantic = llm_guard.analyze(text)
                 if semantic:
                     if semantic.category == "injection":
                         _block_semantic(method, url, semantic)
@@ -263,8 +281,8 @@ def _wrap_urlopen(connectionpool_module):
 
 def _block_pii(method, url, scan_result):
     """PII 차단: 로그 + stderr + 예외"""
-    from llm_guard._guard import log_block
-    log_block(method, str(url), scan_result.pattern_name, scan_result.matched_value)
+    import llm_guard
+    llm_guard.log_block(method, str(url), scan_result.pattern_name, scan_result.matched_value)
     raise PiiBlockedError(
         f"[LLM_GUARD] 차단: {method} {url} - {scan_result.pattern_name} 발견"
     )
@@ -272,8 +290,8 @@ def _block_pii(method, url, scan_result):
 
 def _block_semantic(method, url, result):
     """인젝션 차단: 로그 + stderr + 예외"""
-    from llm_guard._guard import log_block
-    log_block(method, str(url), result.category, result.matched_text)
+    import llm_guard
+    llm_guard.log_block(method, str(url), result.category, result.matched_text)
     raise InjectionBlockedError(
         f"[LLM_GUARD] 차단: {method} {url} - {result.category} 감지 (score={result.score:.2f})"
     )
@@ -281,7 +299,7 @@ def _block_semantic(method, url, result):
 
 def _warn_semantic(method, url, result):
     """탈옥 경고: 로그 + stderr, 요청은 통과"""
-    from llm_guard._guard import log_block
+    import llm_guard
     msg = f"[LLM_GUARD] 경고: {method} {url} - {result.category} 감지 (score={result.score:.2f})"
-    log_block(method, str(url), result.category, result.matched_text)
+    llm_guard.log_block(method, str(url), result.category, result.matched_text)
     print(msg, file=sys.stderr)

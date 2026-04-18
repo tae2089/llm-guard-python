@@ -1,3 +1,4 @@
+# @index 스트리밍 HTTP 응답에서 청크 경계에 걸친 PII를 실시간으로 탐지·마스킹하는 lookback 스캐너.
 """Streaming response PII scanner (Phase 2)."""
 import sys
 from llm_guard._guard import mask as _mask
@@ -26,6 +27,9 @@ class StreamingScanner:
             return self._max_sentence_bytes * 2
         return self._lookback * 2
 
+    # @intent 새 청크를 버퍼에 누적하고 lookback/sentence 전략에 따라 안전하게 방출 가능한 바이트를 반환
+    # @domainRule 버퍼 크기가 lookback 이하이면 b""를 반환해 청크 경계 PII 누락을 방지
+    # @mutates self._buf
     def feed(self, chunk: bytes) -> bytes:
         """새 청크를 받아 방출 가능한 바이트를 리턴."""
         self._buf.extend(chunk)
@@ -59,6 +63,9 @@ class StreamingScanner:
             return self._process(scan_area)
         return b""
 
+    # @intent 스트림 EOF 시 버퍼에 남은 모든 바이트를 스캔·마스킹 후 방출
+    # @sideEffect match_count > 0이면 스캔 완료 통계를 stderr에 출력
+    # @mutates self._buf
     def flush(self) -> bytes:
         remaining = bytes(self._buf)
         self._buf = bytearray()
@@ -114,6 +121,9 @@ _SENTENCE_TERMINATORS = [
 ]
 
 
+# @intent sentence 모드에서 버퍼를 최대한 크게 방출하기 위해 마지막 문장 종결 위치를 탐지
+# @domainRule CJK 종결 부호(。？！)는 뒤에 공백 없이도 문장 끝으로 인정
+# @domainRule 단독 ASCII ./!/?는 URL·소수점·이메일 false positive 방지를 위해 무시
 def _find_sentence_boundary(buf: bytes) -> int:
     """버퍼 내 마지막 문장 종결 신호 직후 위치 반환. 없으면 -1.
 

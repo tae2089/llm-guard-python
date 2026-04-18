@@ -1,8 +1,11 @@
+# @index Python 인터프리터 시작 시 LLM Guard를 자동 활성화하는 부트스트랩 진입점.
 import os
 import sys
 
 
-# --- 체이닝: 다른 sitecustomize.py를 찾아서 실행 (Datadog 방식) ---
+# @intent 기존 sitecustomize.py와 공존하기 위해 다른 sitecustomize를 체이닝 실행
+# @domainRule LLM Guard 초기화 실패와 무관하게 항상 체이닝을 시도한다
+# @sideEffect sys.modules["sitecustomize"]를 임시로 제거했다가 복원
 def _chain_load_sitecustomize():
     """우리 경로를 제외하고 다른 sitecustomize.py가 있으면 실행"""
     our_dir = os.path.abspath(os.path.dirname(__file__))
@@ -39,6 +42,10 @@ def _chain_load_sitecustomize():
             sys.modules["sitecustomize"] = saved
 
 
+# @intent 설정 로드, urllib3 패치, Layer 2 semantic 초기화를 순서대로 수행해 LLM Guard를 활성화
+# @domainRule LLM_GUARD_DISABLE=1 환경변수가 있으면 아무것도 하지 않는다
+# @domainRule Layer 2 초기화 실패는 경고만 출력하고 Layer 1(PII 정규식)은 계속 동작한다
+# @sideEffect sys.meta_path에 LlmGuardFinder를 삽입; urllib3.HTTPConnectionPool.urlopen 패치
 # --- LLM Guard 부트스트랩 ---
 def _bootstrap_llm_guard():
     if os.environ.get("LLM_GUARD_DISABLE", "").lower() in ("1", "true"):
